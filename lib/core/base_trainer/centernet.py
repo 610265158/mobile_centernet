@@ -12,6 +12,22 @@ from train_config import config as cfg
 import timm
 
 
+class SeparableConv2d(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=0, dilation=1, bias=False):
+        super(SeparableConv2d, self).__init__()
+
+        self.conv1 = nn.Sequential(nn.Conv2d(in_channels, in_channels, kernel_size, stride, padding, dilation, groups=in_channels,
+                                    bias=bias),
+                                    nn.BatchNorm2d(in_channels))
+        self.pointwise = nn.Conv2d(in_channels, out_channels, 1, 1, 0, 1, 1, bias=bias)
+
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.pointwise(x)
+        return x
+
+
 class Net(nn.Module):
     def __init__(self, ):
         super().__init__()
@@ -36,12 +52,12 @@ class ComplexUpsample(nn.Module):
     def __init__(self, input_dim=128, outpt_dim=128):
         super().__init__()
 
-        self.conv1 = nn.Sequential(nn.Conv2d(input_dim, outpt_dim, kernel_size=3, stride=1, padding=1, bias=False),
+        self.conv1 = nn.Sequential(SeparableConv2d(input_dim, outpt_dim, kernel_size=3, stride=1, padding=1, bias=False),
                                    nn.BatchNorm2d(outpt_dim),
                                    nn.ReLU()
                                    )
 
-        self.conv2 = nn.Sequential(nn.Conv2d(input_dim, outpt_dim, kernel_size=3, stride=1, padding=1, bias=False),
+        self.conv2 = nn.Sequential(SeparableConv2d(input_dim, outpt_dim, kernel_size=3, stride=1, padding=1, bias=False),
                                    nn.BatchNorm2d(outpt_dim),
                                    nn.ReLU()
                                    )
@@ -58,36 +74,45 @@ class ComplexUpsample(nn.Module):
 
         return z
 
+def normal_init(module, mean=0, std=1, bias=0):
+    nn.init.normal_(module.weight, mean, std)
+    if hasattr(module, 'bias'):
+        nn.init.constant_(module.bias, bias)
 
 class CenterNetHead(nn.Module):
     def __init__(self, ):
         super().__init__()
 
-        self.conv2 = nn.Sequential(nn.Conv2d(24, 64, kernel_size=3, stride=1, padding=1, bias=False),
+        self.conv2 = nn.Sequential(SeparableConv2d(24, 64, kernel_size=3, stride=1, padding=1, bias=False),
                                    nn.BatchNorm2d(64),
                                    nn.ReLU()
                                    )
 
-        self.conv3 = nn.Sequential(nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1, bias=False),
+        self.conv3 = nn.Sequential(SeparableConv2d(32, 64, kernel_size=3, stride=1, padding=1, bias=False),
                                    nn.BatchNorm2d(64),
                                    nn.ReLU()
                                    )
         self.upsample3 = ComplexUpsample(128, 64)
 
-        self.conv4 = nn.Sequential(nn.Conv2d(104, 64, kernel_size=3, stride=1, padding=1, bias=False),
+        self.conv4 = nn.Sequential(SeparableConv2d(104, 64, kernel_size=3, stride=1, padding=1, bias=False),
                                    nn.BatchNorm2d(64),
                                    nn.ReLU()
                                    )
         self.upsample4 = ComplexUpsample(128, 64)
 
-        self.conv5 = nn.Sequential(nn.Conv2d(252, 64, kernel_size=3, stride=1, padding=1, bias=False),
+        self.conv5 = nn.Sequential(SeparableConv2d(252, 64, kernel_size=3, stride=1, padding=1, bias=False),
                                    nn.BatchNorm2d(64),
                                    nn.ReLU()
                                    )
         self.upsample5 = ComplexUpsample(352, 64)
 
-        self.cls = nn.Conv2d(128, 80, kernel_size=3, stride=1, padding=1, bias=True)
-        self.wh = nn.Conv2d(128, 4, kernel_size=3, stride=1, padding=1, bias=True)
+        self.cls =nn.Conv2d(128, 80, kernel_size=3, stride=1, padding=1, bias=True)
+        self.wh =nn.Conv2d(128, 4, kernel_size=3, stride=1, padding=1, bias=True)
+
+        normal_init(self.cls,0,0.01,-2.19)
+        normal_init(self.wh, 0, 0.01, 0)
+
+
 
     def forward(self, inputs):
         ##/24,32,104,352
@@ -121,11 +146,12 @@ class CenterNet(nn.Module):
         ##/24,32,104,352
         fms = self.backbone(inputs)
 
-        for ff in fms:
-            print(ff.size())
+        # for ff in fms:
+        #     print(ff.size())
         cls, wh = self.head(fms)
 
-        return cls,wh
+        return cls,wh*16
+
         # if self.training:
         #     pass
         # else:

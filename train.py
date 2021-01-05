@@ -14,4 +14,4 @@ trainner=Train()
 
 
 
-trainner.train()
+trainner.custom_loop()

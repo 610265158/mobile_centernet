@@ -10,6 +10,7 @@ from train_config import config as cfg
 
 from lib.helper.logger import logger
 from lib.core.base_trainer.centernet import CenterNet
+from lib.core.base_trainer.loss import CenterNetLoss
 from lib.core.utils.torch_utils import EMA
 import random
 from lib.dataset.dataietr import DataIter
@@ -79,7 +80,7 @@ class Train(object):
     # self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,mode='max', patience=3,verbose=True)
     self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR( self.optimizer, self.epochs,eta_min=1.e-6)
 
-    self.criterion = loss(smooth_eps=0.).to(self.device)
+    self.criterion = CenterNetLoss().to(self.device)
 
 
   def custom_loop(self):
@@ -94,8 +95,8 @@ class Train(object):
 
     def train_epoch(epoch_num):
 
-      summary_loss = AverageMeter()
-
+      summary_loss_cls = AverageMeter()
+      summary_loss_wh= AverageMeter()
       self.model.train()
 
       if cfg.MODEL.freeze_bn:
@@ -121,12 +122,13 @@ class Train(object):
 
         image,hm_target, wh_target,weights = next(self.train_ds)
 
+
         if cfg.TRAIN.vis:
             for i in range(image.shape[0]):
 
-                img = hm_target[i]
-                hm = wh_target[i]
-                wh = weights[i]
+                img = image[i]
+                hm = hm_target[i]
+                wh = wh_target[i]
 
                 if cfg.DATA.use_int8_data:
                     hm = hm[:, :, 0].astype(np.uint8)
@@ -144,7 +146,12 @@ class Train(object):
                 cv2.waitKey(0)
         else:
             data = torch.from_numpy(image).to(self.device).float()
-            hm_target = torch.from_numpy(hm_target).to(self.device).float()
+
+            data =data.permute([0,3,1,2])
+            if cfg.DATA.use_int8_data:
+                hm_target = torch.from_numpy(hm_target).to(self.device).float()/cfg.DATA.use_int8_enlarge
+            else:
+                hm_target = torch.from_numpy(hm_target).to(self.device).float()
             wh_target = torch.from_numpy(wh_target).to(self.device).float()
             weights = torch.from_numpy(weights).to(self.device).float()
 
@@ -152,10 +159,11 @@ class Train(object):
 
             cls,wh = self.model(data)
 
-            current_loss = self.criterion(cls,hm_target, wh_target,weights)
+            cls_loss,wh_loss= self.criterion([cls,wh],[hm_target, wh_target,weights])
 
-            summary_loss.update(current_loss.detach().item(), batch_size)
-
+            current_loss=cls_loss+wh_loss
+            summary_loss_cls.update(cls_loss.detach().item(), batch_size)
+            summary_loss_wh.update(wh_loss.detach().item(), batch_size)
             self.optimizer.zero_grad()
 
             if cfg.TRAIN.mix_precision:
@@ -165,7 +173,7 @@ class Train(object):
                 current_loss.backward()
 
             self.optimizer.step()
-            if cfg.MODEL.ema:
+            if cfg.TRAIN.ema:
                 self.ema.update()
             self.iter_num+=1
             time_cost_per_batch=time.time()-start
@@ -175,14 +183,17 @@ class Train(object):
 
             if self.iter_num%cfg.TRAIN.log_interval==0:
 
-                log_message = '[fold %d], '\
+                log_message = '[centernet], '\
                               'Train Step %d, ' \
                               'summary_loss: %.6f, ' \
+                              'cls_loss: %.6f, '\
+                              'wh_loss: %.6f, ' \
                               'time: %.6f, '\
                               'speed %d images/persec'% (
-                                  self.fold,
                                   self.iter_num,
-                                  summary_loss.avg,
+                                  summary_loss_cls.avg+summary_loss_wh.avg,
+                                  summary_loss_cls.avg ,
+                                  summary_loss_wh.avg,
                                   time.time() - start,
                                   images_per_sec)
                 logger.info(log_message)
@@ -194,7 +205,8 @@ class Train(object):
 
       return summary_loss
     def test_epoch(epoch_num):
-        summary_loss = AverageMeter()
+        summary_loss_cls = AverageMeter()
+        summary_loss_wh = AverageMeter()
 
         self.model.eval()
         t = time.time()
@@ -203,27 +215,40 @@ class Train(object):
                 image,hm_target, wh_target,weights= self.val_ds()
 
                 data = torch.from_numpy(image).to(self.device).float()
-                hm_target = torch.from_numpy(hm_target).to(self.device).float()
+
+                ##nhwc to nchw
+                data = data.permute([0, 3, 1, 2])
+
+                if cfg.DATA.use_int8_data:
+                    hm_target = torch.from_numpy(hm_target).to(self.device).float() / cfg.DATA.use_int8_enlarge
+                else:
+                    hm_target = torch.from_numpy(hm_target).to(self.device).float()
+
                 wh_target = torch.from_numpy(wh_target).to(self.device).float()
                 weights = torch.from_numpy(weights).to(self.device).float()
                 batch_size = data.shape[0]
 
 
-                output = self.model(data)
+
                 cls, wh = self.model(data)
 
-                loss = self.criterion(cls, hm_target, wh_target, weights)
-
-                summary_loss.update(loss.detach().item(), batch_size)
-
+                cls_loss,wh_loss = self.criterion([cls,wh], [hm_target, wh_target, weights])
+                loss=cls_loss+wh_loss
+                summary_loss_cls.update(cls_loss.detach().item(), batch_size)
+                summary_loss_wh.update(wh_loss.detach().item(), batch_size)
 
                 if step % cfg.TRAIN.log_interval == 0:
 
-                    log_message = '[fold %d], '\
-                                  'Val Step %d, ' \
-                                  'summary_loss: %.6f, ' \
-                                  'time: %.6f' % (
-                                  self.fold,step, summary_loss.avg,  time.time() - t)
+                    log_message =   '[centernet], '\
+                                    'Val Step %d, ' \
+                                    'summary_loss: %.6f, ' \
+                                    'cls_loss: %.6f, '\
+                                    'wh_loss: %.6f, ' \
+                                    'time: %.6f' % (step,
+                                                  summary_loss_cls.avg+summary_loss_wh.avg,
+                                                  summary_loss_cls.avg,
+                                                  summary_loss_wh.avg,
+                                                  time.time() - t)
 
                     logger.info(log_message)
 
@@ -239,11 +264,10 @@ class Train(object):
 
       summary_loss = train_epoch(epoch)
 
-      train_epoch_log_message = '[fold %d], '\
+      train_epoch_log_message = '[centernet], '\
                                 '[RESULT]: Train. Epoch: %d,' \
                                 ' summary_loss: %.5f,' \
-                                ' time:%.5f' % (
-                                self.fold,epoch, summary_loss.avg, (time.time() - t))
+                                ' time:%.5f' % (epoch, summary_loss.avg, (time.time() - t))
       logger.info(train_epoch_log_message)
 
       if cfg.TRAIN.SWA > 0 and epoch >=cfg.TRAIN.SWA:
@@ -252,18 +276,17 @@ class Train(object):
           self.optimizer.swap_swa_sgd()
 
       ##switch eam weighta
-      if cfg.MODEL.ema:
+      if cfg.TRAIN.ema:
         self.ema.apply_shadow()
 
       if epoch%cfg.TRAIN.test_interval==0:
 
           summary_loss = test_epoch(epoch)
 
-          val_epoch_log_message = '[fold %d], '\
+          val_epoch_log_message = '[centernet], '\
                                   '[RESULT]: VAL. Epoch: %d,' \
                                   ' summary_loss: %.5f,' \
-                                  ' time:%.5f' % (
-                                   self.fold,epoch, summary_loss.avg, (time.time() - t))
+                                  ' time:%.5f' % (epoch, summary_loss.avg, (time.time() - t))
           logger.info(val_epoch_log_message)
 
       self.scheduler.step()
@@ -281,7 +304,7 @@ class Train(object):
       torch.save(self.model.state_dict(),current_model_saved_name)
 
       ####switch back
-      if cfg.MODEL.ema:
+      if cfg.TRAIN.ema:
         self.ema.restore()
 
       # save_checkpoint({

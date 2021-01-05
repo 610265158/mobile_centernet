@@ -9,11 +9,11 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"          ##if u use muti gpu set them v
 config.TRAIN = edict()
 
 #### below are params for dataiter
-config.TRAIN.process_num = 2                      ### process_num for data provider
+config.TRAIN.process_num = 4                      ### process_num for data provider
 config.TRAIN.prefetch_size = 10                  ### prefect Q size for data provider
-
+config.TRAIN.test_interval=1
 config.TRAIN.num_gpu = 1                         ##match with   os.environ["CUDA_VISIBLE_DEVICES"]
-config.TRAIN.batch_size = 16                    ###A big batch size may achieve a better result, but the memory is a problem
+config.TRAIN.batch_size = 32                    ###A big batch size may achieve a better result, but the memory is a problem
 config.TRAIN.log_interval = 10
 config.TRAIN.epoch = 300                      ###just keep training , evaluation shoule be take care by yourself,
                                                ### generally 10,0000 iters is enough
@@ -24,17 +24,19 @@ config.TRAIN.val_set_size=5000             ###widerface val size
 
 config.TRAIN.lr_decay='step'
 config.TRAIN.init_lr=0.001
-
+config.TRAIN.warmup_step=1000
 config.TRAIN.opt='adam'
 config.TRAIN.weight_decay_factor = 1.e-5                  ##l2 regular
-config.TRAIN.vis=True                                    ##check data flag
-config.TRAIN.mix_precision=False
+config.TRAIN.vis=False                                    ##check data flag
+config.TRAIN.mix_precision=True
 
 config.TRAIN.norm='BN'    ##'GN' OR 'BN'
 config.TRAIN.lock_basenet_bn=False
 config.TRAIN.frozen_stages=-1   ##no freeze
 config.TRAIN.gradient_clip=False
+config.TRAIN.SWA=-1
 
+config.TRAIN.ema=False
 config.DATA = edict()
 config.DATA.root_path=''
 config.DATA.train_txt_path='train.txt'
@@ -43,8 +45,8 @@ config.DATA.num_category=80                                  ###face 1  voc 20 c
 config.DATA.num_class = config.DATA.num_category
 
 
-config.DATA.hin = 416  # input size
-config.DATA.win = 416
+config.DATA.hin = 320  # input size
+config.DATA.win = 320
 config.DATA.channel = 3
 config.DATA.max_size=[config.DATA.hin,config.DATA.win]  ##h,w
 config.DATA.cover_obj=8                          ###cover the small objs
@@ -73,7 +75,7 @@ config.MODEL.global_stride=4
 config.MODEL.head_dims=[128,128,128]
 config.MODEL.prehead_dims=[128,48]   ##no pre head
 
-
+config.MODEL.freeze_bn=False
 config.MODEL.deployee= False    ### tensorflow, mnn, coreml
 if config.MODEL.deployee:
     config.TRAIN.batch_size = 1

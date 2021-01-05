@@ -520,7 +520,7 @@ class DataIter():
         self.ds = self.build_iter()
 
 
-
+        self.size=len(self.generator)//self.batch_size
     def parse_file(self, im_root_path, ann_file):
 
         raise NotImplementedError("you need implemented the parse func for your data")
