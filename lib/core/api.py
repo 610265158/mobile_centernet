@@ -11,9 +11,10 @@ class Detector:
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
 
-        self.model=CenterNet()
-        # state_dict = torch.load(model_path, map_location=self.device)
-        # self.model.load_state_dict(state_dict, strict=False)
+        self.model=CenterNet(inference=True)
+        print(model_path)
+        state_dict = torch.load(model_path, map_location=self.device)
+        self.model.load_state_dict(state_dict, strict=False)
         self.model.eval()
     def __call__(self, image, score_threshold=0.5,input_shape=(cfg.DATA.hin,cfg.DATA.win),max_boxes=1000):
         """Detect faces.
@@ -46,59 +47,35 @@ class Detector:
         image_fornet = np.expand_dims(image, 0)
         image_fornet = np.transpose(image_fornet,axes=[0,3,1,2])
 
-        image_fornet=torch.from_numpy(image_fornet)
-        cls,wh=self.model(image_fornet)
-        cls=torch.nn.functional.sigmoid(cls)
-        print(cls.detach().cpu().numpy().shape)
+        image_fornet=torch.from_numpy(image_fornet).float()
+        output=self.model(image_fornet)
 
-        kps=cls.detach().cpu().numpy()[0,0,:,:]
+        outputs=output.detach().cpu().numpy()
 
-        label =kps
-        label = (label / np.max(label) * 255).astype(np.uint8)
-        cv2.namedWindow('label', 0)
-        cv2.imshow('label', label)
-        cv2.waitKey(0)
+        bboxes=outputs[0]
 
-        # bboxes=outputs[0]
-        #
-        # # print(kps.shape)
-        # # kps=kps[0][:,:,0]
-        # #
-        # # label =kps
-        # # #label = (label / np.max(label) * 255).astype(np.uint8)
-        # # cv2.namedWindow('label', 0)
-        # # cv2.imshow('label', label)
-        # #
-        # # wh = wh[0][:, :, 0]
-        # #
-        # # print(np.min(wh))
-        # # print(np.max(wh))
-        # # wh = wh / np.max(wh)
-        # # wh = wh
-        # # # label = (label / np.max(label) * 255).astype(np.uint8)
-        # # cv2.namedWindow('wh', 0)
-        # # cv2.imshow('wh', wh)
-        #
-        #
-        # bboxes = self.py_nms(np.array(bboxes), iou_thres=None, score_thres=score_threshold,max_boxes=max_boxes)
-        #
-        # ###recorver to raw image
-        # boxes_scaler = np.array([1 / scale_x,
-        #                          1  / scale_y,
-        #                          1 / scale_x,
-        #                          1  / scale_y,
-        #                          1.,1.], dtype='float32')
-        #
-        # boxes_bias = np.array([dx ,
-        #                        dy ,
-        #                        dx ,
-        #                        dy , 0.,0.], dtype='float32')
-        # bboxes = (bboxes - boxes_bias)*boxes_scaler
-        #
-        #
-        #
-        # # self.stats_graph(self._sess.graph)
-        # return bboxes
+        print(bboxes[0,...])
+
+        bboxes = self.py_nms(np.array(bboxes), iou_thres=None, score_thres=score_threshold,max_boxes=max_boxes)
+
+        ###recorver to raw image
+        boxes_scaler = np.array([1 / scale_x,
+                                 1  / scale_y,
+                                 1 / scale_x,
+                                 1  / scale_y,
+                                 1.,1.], dtype='float32')
+
+        boxes_bias = np.array([dx ,
+                               dy ,
+                               dx ,
+                               dy , 0.,0.], dtype='float32')
+        bboxes = (bboxes - boxes_bias)*boxes_scaler
+
+
+        print(bboxes)
+
+        # self.stats_graph(self._sess.graph)
+        return bboxes
 
 
     def preprocess(self, image, target_height, target_width, label=None):

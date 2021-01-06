@@ -12,17 +12,19 @@ from train_config import config as cfg
 import argparse
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--model', type=str,default='coco', help='detect with pth model',required=False)
 parser.add_argument('--style', type=str,default='coco', help='detect with coco or face',required=False)
 parser.add_argument('--imgDir', type=str,default='../pubdata/mscoco/val2017', help='the image dir to detect')
 parser.add_argument('--thres', type=float,default=0.3, help='the thres for detect')
 args = parser.parse_args()
 
+model_apth=args.model
 data_dir=args.imgDir
 style=args.style
 thres=args.thres
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-detector = Detector(['./model/detector.pth'])
+detector = Detector(model_apth)
 coco_map = {0: (1, 'person'), 1: (2, 'bicycle'), 2: (3, 'car'), 3: (4, 'motorcycle'), 4: (5, 'airplane'), 5: (6, 'bus'),
             6: (7, 'train'), 7: (8, 'truck'), 8: (9, 'boat'), 9: (10, 'traffic shufflenet'), 10: (11, 'fire hydrant'),
             11: (13, 'stop sign'), 12: (14, 'parking meter'), 13: (15, 'bench'), 14: (16, 'bird'), 15: (17, 'cat'),
@@ -67,35 +69,35 @@ def cocodetect(data_dir):
 
     for pic in pics:
         print(pic)
-        try:
-            img=cv2.imread(pic)
-            #cv2.imwrite('tmp.png',img)
-            img_show = img.copy()
-        except:
-            continue
+
+        img=cv2.imread(pic)
+
+        img_show = img.copy()
+
 
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         boxes=detector(img,thres,input_shape=(cfg.DATA.hin,cfg.DATA.win))
 
-        # print(boxes.shape[0])
-        # if boxes.shape[0]==0:
-        #     print(pic)
-        #
-        # for box_index in range(boxes.shape[0]):
-        #
-        #     bbox = boxes[box_index]
-        #
-        #     cv2.rectangle(img_show, (int(bbox[0]), int(bbox[1])),
-        #                   (int(bbox[2]), int(bbox[3])), (255, 0, 0), 4)
-        #     str_draw = '%s:%.2f' %(coco_map[int(bbox[5])][1],bbox[4])
-        #     cv2.putText(img_show, str_draw, (int(bbox[0]), int(bbox[1])), cv2.FONT_HERSHEY_SIMPLEX, 2,
-        #                 (255, 0, 255), 2)
-        #
-        #
-        # cv2.namedWindow('res',0)
-        # cv2.imshow('res',img_show)
-        # cv2.waitKey(0)
+        print(boxes.shape[0])
+        if boxes.shape[0]==0:
+            print(pic)
+
+        for box_index in range(boxes.shape[0]):
+
+            bbox = boxes[box_index]
+
+            cv2.rectangle(img_show, (int(bbox[0]), int(bbox[1])),
+                          (int(bbox[2]), int(bbox[3])), (255, 0, 0), 4)
+            str_draw = '%s:%.2f' %(coco_map[int(bbox[5])][1],bbox[4])
+            cv2.putText(img_show, str_draw, (int(bbox[0]), int(bbox[1])), cv2.FONT_HERSHEY_SIMPLEX, 2,
+                        (255, 0, 255), 2)
+
+
+
+        cv2.namedWindow('immm',0)
+        cv2.imshow('immm',img_show)
+        cv2.waitKey(0)
 
     print(success_cnt,'decoded')
     print(count)

@@ -4,7 +4,7 @@
 import sys
 sys.path.append('.')
 from train_config import config as cfg
-import tfcoreml
+
 import coremltools
 import cv2
 import numpy as np
@@ -52,23 +52,23 @@ def inference(model_path,img_dir,thres=0.3):
         image = image.astype(np.uint8)
         pil_img = PIL.Image.fromarray(image)
 
-        coreml_inputs = {'tower_0/images': pil_img}
+        coreml_inputs = {'__input': pil_img}
 
         coreml_outputs = centernet_model.predict(coreml_inputs, useCPUOnly=True)
 
-        boxes=coreml_outputs['tower_0/detections']
+        boxes=coreml_outputs['2874']
 
         boxes=boxes[0]
 
+        print(boxes.shape)
         for i in range(len(boxes)):
             bbox = boxes[i]
+            print(bbox)
 
-            if bbox[4]>thres:
+            if bbox[4] > thres:
+                cv2.rectangle(image_show, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (0, 0, 255), 4)
 
-                cv2.rectangle(image_show, (int(bbox[0]), int(bbox[1])),
-                              (int(bbox[2]), int(bbox[3])), (255, 0, 0), 4)
-
-                str_draw = '%s:%.2f' % (coco_map[int(bbox[5])%80][1], bbox[4])
+                str_draw = '%s:%.2f' % (coco_map[int(bbox[5]) % 80][1], bbox[4])
                 cv2.putText(image_show, str_draw, (int(bbox[0]), int(bbox[1])), cv2.FONT_HERSHEY_SIMPLEX, 2,
                             (255, 0, 255), 2)
 

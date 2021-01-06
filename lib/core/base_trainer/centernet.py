@@ -11,6 +11,12 @@ from train_config import config as cfg
 
 import timm
 
+def get_nearestup_weight(cin):
+    filt=torch.Tensor([[0, 0, 0, 0], [0, 1, 1, 0], [0, 1, 1, 0], [0, 0, 0, 0]])[None, None, ...]
+    weight = np.zeros((cin, cin, 4, 4),
+                      dtype=np.float64)
+    weight[range(cin), range(cin), :, :] = filt
+    return torch.from_numpy(weight).float()
 
 class SeparableConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=0, dilation=1, bias=False):
@@ -40,8 +46,7 @@ class Net(nn.Module):
 
     def forward(self, inputs):
         # do preprocess
-
-        inputs = inputs / 255.
+        # inputs = inputs / 255.
         # Convolution layers
         fms = self.model(inputs)
 
@@ -70,7 +75,12 @@ class ComplexUpsample(nn.Module):
 
         z = x + y
 
-        z = nn.functional.upsample(z, scale_factor=2, )
+
+        n,c,h,w=z.size()
+
+        size=(2*h,2*w)
+
+        z = nn.functional.upsample(z, size=size,mode='nearest' )
 
         return z
 
@@ -106,11 +116,11 @@ class CenterNetHead(nn.Module):
                                    )
         self.upsample5 = ComplexUpsample(352, 64)
 
-        self.cls =nn.Conv2d(128, 80, kernel_size=3, stride=1, padding=1, bias=True)
-        self.wh =nn.Conv2d(128, 4, kernel_size=3, stride=1, padding=1, bias=True)
+        self.cls =SeparableConv2d(128, 80, kernel_size=3, stride=1, padding=1, bias=True)
+        self.wh =SeparableConv2d(128, 4, kernel_size=3, stride=1, padding=1, bias=True)
 
-        normal_init(self.cls,0,0.01,-2.19)
-        normal_init(self.wh, 0, 0.01, 0)
+        normal_init(self.cls.pointwise, 0, 0.01,-2.19)
+        normal_init(self.wh.pointwise, 0, 0.01, 0)
 
 
 
@@ -136,12 +146,12 @@ class CenterNetHead(nn.Module):
 
 
 class CenterNet(nn.Module):
-    def __init__(self, ):
+    def __init__(self, inference=False ):
         super().__init__()
 
         self.backbone = Net()
         self.head = CenterNetHead()
-
+        self.inference=inference
     def forward(self, inputs):
         ##/24,32,104,352
         fms = self.backbone(inputs)
@@ -149,72 +159,66 @@ class CenterNet(nn.Module):
         # for ff in fms:
         #     print(ff.size())
         cls, wh = self.head(fms)
-
-        return cls,wh*16
-
-        # if self.training:
-        #     pass
-        # else:
-        #     detections = self.decode(cls, wh, 4)
-        #     return detections
+        if not self.inference:
+            return cls,wh*16
+        else:
+            detections = self.decode(cls, wh*16, 4)
+            return detections
 
     def decode(self, heatmap, wh, stride, K=100):
         def nms(heat, kernel=3):
             ##fast
 
-            score, clses = torch.max(heat, dim=1)
+            score, clses = torch.max(heat, dim=1,keepdim=True)
 
             scores = torch.nn.functional.sigmoid(score)
 
-            hmax = torch.nn.functional.max_pool2d(scores, kernel, 1, padding=1)
-            keep = scores = hmax
+            hmax = nn.MaxPool2d(kernel,1,padding=1)(scores)
+            keep = (scores == hmax).float()
             return scores * keep, clses
+        def get_bboxes(wh):
+
+            ### decode the box
+            shifts_x = torch.range(0, (W - 1) * stride + 1, stride,
+                                   dtype=torch.int32)
+
+            shifts_y = torch.range(0, (H - 1) * stride + 1, stride,
+                                   dtype=torch.int32)
+
+            x_range, y_range = torch.meshgrid(shifts_x, shifts_y)
+
+            base_loc = torch.stack((x_range, y_range, x_range, y_range), axis=0)  # (h, w，4)
+
+            base_loc = torch.unsqueeze(base_loc, dim=0)
+
+            wh = wh * torch.from_numpy(np.array([1, 1, -1, -1]).reshape([1, 4, 1, 1]))
+            pred_boxes = base_loc - wh
+
+            return pred_boxes
 
         batch, cat, H, W = heatmap.size()
 
+
         score_map, label_map = nms(heatmap)
+        pred_boxes=get_bboxes(wh)
 
-        ### decode the box
-        shifts_x = torch.range(0, (W - 1) * stride + 1, stride,
-                               dtype=torch.int32)
 
-        shifts_y = torch.range(0, (H - 1) * stride + 1, stride,
-                               dtype=torch.int32)
-
-        x_range, y_range = torch.meshgrid(shifts_x, shifts_y)
-
-        base_loc = torch.stack((x_range, y_range, x_range, y_range), axis=0)  # (h, w，4)
-
-        base_loc = torch.unsqueeze(base_loc, dim=0)
-
-        wh = wh * torch.from_numpy(np.array([1, 1, -1, -1]).reshape([1, 4, 1, 1]))
-        pred_boxes = base_loc - wh
-
-        # pred_boxes = tf.concat((base_loc[:, :, :, 0:1] - wh[:, :, :, 0:1],
-        #                         base_loc[:, :, :, 1:2] - wh[:, :, :, 1:2],
-        #                         base_loc[:, :, :, 0:1] + wh[:, :, :, 2:3],
-        #                         base_loc[:, :, :, 1:2] + wh[:, :, :, 3:4]), axis=3)
-
-        ###get the topk bboxes
         score_map = torch.reshape(score_map, shape=[batch, -1])
-        # topk_scores, topk_inds = tf.nn.top_k(score_map, k=K)
-        # # # [b,k]
+        score_map = torch.unsqueeze(score_map, 2)
 
         pred_boxes = torch.reshape(pred_boxes, shape=[batch, 4, -1])
-        # pred_boxes = tf.batch_gather(pred_boxes, topk_inds)
+        pred_boxes=pred_boxes.permute([0,2,1])
+
 
         label_map = torch.reshape(label_map, shape=[batch, -1])
-        # label_map = tf.batch_gather(label_map, topk_inds)
-
-        score_map = torch.unsqueeze(score_map, 1)
-        label_map = torch.unsqueeze(label_map, 1)
+        label_map = torch.unsqueeze(label_map, 2)
 
         pred_boxes = pred_boxes.float()
         label_map = label_map.float()
 
-        detections = torch.cat([pred_boxes, score_map, label_map], dim=1)
+        detections = torch.cat([ pred_boxes,score_map, label_map], dim=2)
 
-        print(detections.size())
+
         return detections
 
 
@@ -223,7 +227,7 @@ if __name__ == '__main__':
     import torchvision
 
     dummy_input = torch.randn(1, 3, 512, 512, device='cpu')
-    model = CenterNet()
+    model = CenterNet(inference=True)
 
     ### load your weights
     model.eval()

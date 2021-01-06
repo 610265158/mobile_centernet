@@ -203,7 +203,8 @@ class Train(object):
         if cfg.TRAIN.SWA>0 and epoch_num>=cfg.TRAIN.SWA:
             self.optimizer.update_swa()
 
-      return summary_loss
+      return summary_loss_cls,summary_loss_wh
+
     def test_epoch(epoch_num):
         summary_loss_cls = AverageMeter()
         summary_loss_wh = AverageMeter()
@@ -212,7 +213,7 @@ class Train(object):
         t = time.time()
         with torch.no_grad():
             for step in range(self.val_ds.size):
-                image,hm_target, wh_target,weights= self.val_ds()
+                image,hm_target, wh_target,weights= next(self.val_ds)
 
                 data = torch.from_numpy(image).to(self.device).float()
 
@@ -253,7 +254,7 @@ class Train(object):
                     logger.info(log_message)
 
 
-        return summary_loss
+        return summary_loss_cls,summary_loss_wh
 
     for epoch in range(self.epochs):
 
@@ -262,12 +263,18 @@ class Train(object):
       logger.info('learning rate: [%f]' %(lr))
       t=time.time()
 
-      summary_loss = train_epoch(epoch)
+      summary_loss_cls,summary_loss_wh = train_epoch(epoch)
 
       train_epoch_log_message = '[centernet], '\
                                 '[RESULT]: Train. Epoch: %d,' \
                                 ' summary_loss: %.5f,' \
-                                ' time:%.5f' % (epoch, summary_loss.avg, (time.time() - t))
+                                ' cls_loss: %.6f, ' \
+                                ' wh_loss: %.6f, ' \
+                                ' time:%.5f' % (epoch,
+                                                summary_loss_cls.avg+summary_loss_wh.avg,
+                                                summary_loss_cls.avg,
+                                                summary_loss_wh.avg,
+                                                (time.time() - t))
       logger.info(train_epoch_log_message)
 
       if cfg.TRAIN.SWA > 0 and epoch >=cfg.TRAIN.SWA:
@@ -281,12 +288,18 @@ class Train(object):
 
       if epoch%cfg.TRAIN.test_interval==0:
 
-          summary_loss = test_epoch(epoch)
+          summary_loss_cls,summary_loss_wh = test_epoch(epoch)
 
           val_epoch_log_message = '[centernet], '\
                                   '[RESULT]: VAL. Epoch: %d,' \
                                   ' summary_loss: %.5f,' \
-                                  ' time:%.5f' % (epoch, summary_loss.avg, (time.time() - t))
+                                  ' cls_loss: %.6f, ' \
+                                  ' wh_loss: %.6f, ' \
+                                  ' time:%.5f' % (epoch,
+                                                  summary_loss_cls.avg+summary_loss_wh.avg,
+                                                  summary_loss_cls.avg,
+                                                  summary_loss_wh.avg,
+                                                  (time.time() - t))
           logger.info(val_epoch_log_message)
 
       self.scheduler.step()
@@ -298,7 +311,7 @@ class Train(object):
       ###save the best auc model
 
       #### save the model every end of epoch
-      current_model_saved_name='./models/fold%d_epoch_%d_val_loss%.6f.pth'%(self.fold,epoch,summary_loss.avg)
+      current_model_saved_name='./model/centernet_epoch_%d_val_loss%.6f.pth'%(epoch,summary_loss_cls.avg+summary_loss_wh.avg)
 
       logger.info('A model saved to %s' % current_model_saved_name)
       torch.save(self.model.state_dict(),current_model_saved_name)

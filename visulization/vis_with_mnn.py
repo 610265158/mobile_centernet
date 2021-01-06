@@ -52,8 +52,11 @@ def inference(mnn_model_path,img_dir,thres=0.3):
         image_show=image.copy()
 
         image = image.astype(np.float32)
+        # image = np.transpose(image,axes=[2,0,1])
 
-        tmp_input = MNN.Tensor((1, cfg.DATA.hin, cfg.DATA.win,3 ), MNN.Halide_Type_Float,\
+        print(image.shape)
+
+        tmp_input = MNN.Tensor((1, 3, cfg.DATA.hin, cfg.DATA.win ), MNN.Halide_Type_Float,\
                         image, MNN.Tensor_DimensionType_Tensorflow)
         #construct tensor from np.ndarray
         input_tensor.copyFrom(tmp_input)
@@ -65,13 +68,13 @@ def inference(mnn_model_path,img_dir,thres=0.3):
 
         output_tensor = interpreter.getSessionOutputAll(session)
 
-        boxes=output_tensor['tower_0/concat_1'].getData()
-        print(boxes)
-        boxes=np.reshape(boxes,newshape=[100,6])
+        boxes=output_tensor['output'].getData()
+
+        boxes=np.reshape(boxes,newshape=[6400,6])
         print(boxes.shape)
         for i in range(len(boxes)):
             bbox = boxes[i]
-            print(bbox)
+            # print(bbox)
             if bbox[4]>thres:
 
 

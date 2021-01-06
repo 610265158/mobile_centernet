@@ -15,20 +15,24 @@ config.TRAIN.test_interval=1
 config.TRAIN.num_gpu = 1                         ##match with   os.environ["CUDA_VISIBLE_DEVICES"]
 config.TRAIN.batch_size = 32                    ###A big batch size may achieve a better result, but the memory is a problem
 config.TRAIN.log_interval = 10
-config.TRAIN.epoch = 300                      ###just keep training , evaluation shoule be take care by yourself,
+config.TRAIN.epoch = 50                      ###just keep training , evaluation shoule be take care by yourself,
                                                ### generally 10,0000 iters is enough
 
 config.TRAIN.train_set_size=117266            ###widerface train size
 config.TRAIN.val_set_size=5000             ###widerface val size
 
 
-config.TRAIN.lr_decay='step'
+config.TRAIN.lr_decay='cos'
 config.TRAIN.init_lr=0.001
 config.TRAIN.warmup_step=1000
-config.TRAIN.opt='adam'
+config.TRAIN.opt='Adamw'
 config.TRAIN.weight_decay_factor = 1.e-5                  ##l2 regular
-config.TRAIN.vis=False                                    ##check data flag
-config.TRAIN.mix_precision=True
+config.TRAIN.vis=True                                    ##check data flag
+
+if config.TRAIN.vis:
+    config.TRAIN.mix_precision=False
+else:
+    config.TRAIN.mix_precision = True
 
 config.TRAIN.norm='BN'    ##'GN' OR 'BN'
 config.TRAIN.lock_basenet_bn=False
