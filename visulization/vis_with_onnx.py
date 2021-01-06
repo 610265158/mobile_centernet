@@ -126,7 +126,7 @@ def inference(model_path,img_dir,thres=0.3):
         for i in range(len(boxes)):
             bbox = boxes[i]
 
-            print(bbox[0])
+
             if bbox[4]>thres:
 
                 cv2.rectangle(image_show, (int(bbox[0]), int(bbox[1])),(int(bbox[2]), int(bbox[3])), (0,0,255), 4)
