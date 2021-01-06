@@ -46,7 +46,7 @@ class Net(nn.Module):
 
     def forward(self, inputs):
         # do preprocess
-        # inputs = inputs / 255.
+
         # Convolution layers
         fms = self.model(inputs)
 
@@ -146,12 +146,15 @@ class CenterNetHead(nn.Module):
 
 
 class CenterNet(nn.Module):
-    def __init__(self, inference=False ):
+    def __init__(self, inference=False,coreml=False ):
         super().__init__()
 
         self.backbone = Net()
         self.head = CenterNetHead()
         self.inference=inference
+
+        self.coreml_=coreml
+
     def forward(self, inputs):
         ##/24,32,104,352
         fms = self.backbone(inputs)
@@ -204,20 +207,45 @@ class CenterNet(nn.Module):
 
 
         score_map = torch.reshape(score_map, shape=[batch, -1])
-        score_map = torch.unsqueeze(score_map, 2)
 
-        pred_boxes = torch.reshape(pred_boxes, shape=[batch, 4, -1])
-        pred_boxes=pred_boxes.permute([0,2,1])
+        top_score,top_index=torch.topk(score_map,k=K)
+
+        top_score = torch.unsqueeze(top_score, 2)
 
 
-        label_map = torch.reshape(label_map, shape=[batch, -1])
-        label_map = torch.unsqueeze(label_map, 2)
+        if self.coreml_:
+            pred_boxes = torch.reshape(pred_boxes, shape=[batch, 4, -1])
+            pred_boxes = pred_boxes.permute([0, 2, 1])
+            top_index_bboxes=torch.stack([top_index,top_index,top_index,top_index],dim=2)
 
-        pred_boxes = pred_boxes.float()
-        label_map = label_map.float()
 
-        detections = torch.cat([ pred_boxes,score_map, label_map], dim=2)
+            pred_boxes = torch.gather(pred_boxes,dim=1,index=top_index_bboxes)
 
+            label_map = torch.reshape(label_map, shape=[batch, -1])
+            label_map = torch.gather(label_map,dim=1,index=top_index)
+            label_map = torch.unsqueeze(label_map, 2)
+
+            pred_boxes = pred_boxes.float()
+            label_map = label_map.float()
+
+
+            detections = torch.cat([pred_boxes, top_score, label_map], dim=2)
+
+        else:
+            pred_boxes = torch.reshape(pred_boxes, shape=[batch, 4, -1])
+            pred_boxes=pred_boxes.permute([0,2,1])
+
+            pred_boxes = pred_boxes[:,top_index[0],:]
+
+            label_map = torch.reshape(label_map, shape=[batch, -1])
+            label_map = label_map[:,top_index[0]]
+            label_map = torch.unsqueeze(label_map, 2)
+
+
+            pred_boxes = pred_boxes.float()
+            label_map = label_map.float()
+
+            detections = torch.cat([ pred_boxes,top_score, label_map], dim=2)
 
         return detections
 
