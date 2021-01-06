@@ -56,15 +56,14 @@ def inference(model_path,img_dir,thres=0.3):
 
         coreml_outputs = centernet_model.predict(coreml_inputs, useCPUOnly=True)
 
-        boxes=coreml_outputs['2874']
+        boxes=coreml_outputs['2872']
 
         boxes=boxes[0]
 
-        print(boxes.shape)
+
         for i in range(len(boxes)):
             bbox = boxes[i]
-            print(bbox)
-
+      
             if bbox[4] > thres:
                 cv2.rectangle(image_show, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (0, 0, 255), 4)
 

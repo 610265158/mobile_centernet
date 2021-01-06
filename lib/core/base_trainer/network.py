@@ -183,13 +183,14 @@ class Train(object):
 
             if self.iter_num%cfg.TRAIN.log_interval==0:
 
-                log_message = '[centernet], '\
-                              'Train Step %d, ' \
+                log_message = '[TRAIN], '\
+                              'Epoch %d Step %d, ' \
                               'summary_loss: %.6f, ' \
                               'cls_loss: %.6f, '\
                               'wh_loss: %.6f, ' \
                               'time: %.6f, '\
                               'speed %d images/persec'% (
+                                  epoch_num,
                                   self.iter_num,
                                   summary_loss_cls.avg+summary_loss_wh.avg,
                                   summary_loss_cls.avg ,
@@ -240,16 +241,17 @@ class Train(object):
 
                 if step % cfg.TRAIN.log_interval == 0:
 
-                    log_message =   '[centernet], '\
-                                    'Val Step %d, ' \
+                    log_message =   '[VAL], '\
+                                    'Epoch %d Step %d, ' \
                                     'summary_loss: %.6f, ' \
                                     'cls_loss: %.6f, '\
                                     'wh_loss: %.6f, ' \
-                                    'time: %.6f' % (step,
-                                                  summary_loss_cls.avg+summary_loss_wh.avg,
-                                                  summary_loss_cls.avg,
-                                                  summary_loss_wh.avg,
-                                                  time.time() - t)
+                                    'time: %.6f' % (epoch_num,
+                                                    step,
+                                                    summary_loss_cls.avg+summary_loss_wh.avg,
+                                                    summary_loss_cls.avg,
+                                                    summary_loss_wh.avg,
+                                                    time.time() - t)
 
                     logger.info(log_message)
 
@@ -308,7 +310,7 @@ class Train(object):
       #### save model
       if not os.access(cfg.MODEL.model_path, os.F_OK):
           os.mkdir(cfg.MODEL.model_path)
-      ###save the best auc model
+
 
       #### save the model every end of epoch
       current_model_saved_name='./model/centernet_epoch_%d_val_loss%.6f.pth'%(epoch,summary_loss_cls.avg+summary_loss_wh.avg)
@@ -320,9 +322,6 @@ class Train(object):
       if cfg.TRAIN.ema:
         self.ema.restore()
 
-      # save_checkpoint({
-      #           'state_dict': self.model.state_dict(),
-      #           },iters=epoch,tag=current_model_saved_name)
 
       if cfg.TRAIN.SWA > 0 and epoch > cfg.TRAIN.SWA:
           ###switch back to plain model to train next epoch

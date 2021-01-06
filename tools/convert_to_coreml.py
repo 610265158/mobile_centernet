@@ -45,7 +45,6 @@ state_dict = torch.load(model_path, map_location=device)
 model.load_state_dict(state_dict, strict=True)
 trace = torch.jit.trace(model, dummy_input)
 
-print(trace)
 # Convert the model
 mlmodel = ct.convert(
     trace,
