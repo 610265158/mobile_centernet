@@ -41,7 +41,7 @@ class Net(nn.Module):
         # self.mean_tensor=torch.from_numpy(cfg.DATA.PIXEL_MEAN ).float().cuda()
         # self.std_val_tensor = torch.from_numpy(cfg.DATA.PIXEL_STD).float().cuda()
         # self.model = EfficientNet.from_pretrained(model_name='efficientnet-b0')
-        self.model = timm.create_model('mobilenetv2_110d', pretrained=True, features_only=True)
+        self.model = timm.create_model('mobilenetv2_100', pretrained=True, features_only=True)
         # self.model = timm.create_model('hrnet_w32', pretrained=True)
 
     def forward(self, inputs):
@@ -105,17 +105,17 @@ class CenterNetHead(nn.Module):
                                    )
         self.upsample3 = ComplexUpsample(128, 64)
 
-        self.conv4 = nn.Sequential(SeparableConv2d(104, 64, kernel_size=3, stride=1, padding=1, bias=False),
+        self.conv4 = nn.Sequential(SeparableConv2d(96, 64, kernel_size=3, stride=1, padding=1, bias=False),
                                    nn.BatchNorm2d(64),
                                    nn.ReLU()
                                    )
         self.upsample4 = ComplexUpsample(128, 64)
 
-        self.conv5 = nn.Sequential(SeparableConv2d(352, 64, kernel_size=3, stride=1, padding=1, bias=False),
+        self.conv5 = nn.Sequential(SeparableConv2d(320, 64, kernel_size=3, stride=1, padding=1, bias=False),
                                    nn.BatchNorm2d(64),
                                    nn.ReLU()
                                    )
-        self.upsample5 = ComplexUpsample(352, 64)
+        self.upsample5 = ComplexUpsample(320, 64)
 
         self.cls =SeparableConv2d(128, 80, kernel_size=3, stride=1, padding=1, bias=True)
         self.wh =SeparableConv2d(128, 4, kernel_size=3, stride=1, padding=1, bias=True)
@@ -160,8 +160,8 @@ class CenterNet(nn.Module):
         ##/24,32,96,320
         fms = self.backbone(inputs)
 
-        for ff in fms:
-            print(ff.size())
+        # for ff in fms:
+        #     print(ff.size())
         cls, wh = self.head(fms)
         if not self.inference:
             return cls,wh*16
