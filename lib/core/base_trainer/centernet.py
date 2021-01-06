@@ -41,7 +41,7 @@ class Net(nn.Module):
         # self.mean_tensor=torch.from_numpy(cfg.DATA.PIXEL_MEAN ).float().cuda()
         # self.std_val_tensor = torch.from_numpy(cfg.DATA.PIXEL_STD).float().cuda()
         # self.model = EfficientNet.from_pretrained(model_name='efficientnet-b0')
-        self.model = timm.create_model('mobilenetv2_110d', pretrained=True, features_only=True)
+        self.model = timm.create_model('mobilenetv2_100', pretrained=True, features_only=True)
         # self.model = timm.create_model('hrnet_w32', pretrained=True)
 
     def forward(self, inputs):
@@ -50,6 +50,8 @@ class Net(nn.Module):
         # Convolution layers
         fms = self.model(inputs)
 
+        for xx in fms:
+            print(xx.size())
         return fms[1:]
 
 
@@ -62,7 +64,7 @@ class ComplexUpsample(nn.Module):
                                    nn.ReLU()
                                    )
 
-        self.conv2 = nn.Sequential(SeparableConv2d(input_dim, outpt_dim, kernel_size=3, stride=1, padding=1, bias=False),
+        self.conv2 = nn.Sequential(SeparableConv2d(input_dim, outpt_dim, kernel_size=5, stride=1, padding=2, bias=False),
                                    nn.BatchNorm2d(outpt_dim),
                                    nn.ReLU()
                                    )
@@ -104,17 +106,17 @@ class CenterNetHead(nn.Module):
                                    )
         self.upsample3 = ComplexUpsample(128, 64)
 
-        self.conv4 = nn.Sequential(SeparableConv2d(104, 64, kernel_size=3, stride=1, padding=1, bias=False),
+        self.conv4 = nn.Sequential(SeparableConv2d(96, 64, kernel_size=3, stride=1, padding=1, bias=False),
                                    nn.BatchNorm2d(64),
                                    nn.ReLU()
                                    )
         self.upsample4 = ComplexUpsample(128, 64)
 
-        self.conv5 = nn.Sequential(SeparableConv2d(252, 64, kernel_size=3, stride=1, padding=1, bias=False),
+        self.conv5 = nn.Sequential(SeparableConv2d(320, 64, kernel_size=3, stride=1, padding=1, bias=False),
                                    nn.BatchNorm2d(64),
                                    nn.ReLU()
                                    )
-        self.upsample5 = ComplexUpsample(352, 64)
+        self.upsample5 = ComplexUpsample(320, 64)
 
         self.cls =SeparableConv2d(128, 80, kernel_size=3, stride=1, padding=1, bias=True)
         self.wh =SeparableConv2d(128, 4, kernel_size=3, stride=1, padding=1, bias=True)
@@ -125,7 +127,7 @@ class CenterNetHead(nn.Module):
 
 
     def forward(self, inputs):
-        ##/24,32,104,352
+        ##/24,32,96,320
         c2, c3, c4, c5 = inputs
 
         c5_upsample = self.upsample5(c5)
@@ -156,7 +158,7 @@ class CenterNet(nn.Module):
         self.coreml_=coreml
 
     def forward(self, inputs):
-        ##/24,32,104,352
+        ##/24,32,96,320
         fms = self.backbone(inputs)
 
         # for ff in fms:
