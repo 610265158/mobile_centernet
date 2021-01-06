@@ -54,11 +54,11 @@ def inference(mnn_model_path,img_dir,thres=0.3):
         image = image.astype(np.float32)
         # image = np.transpose(image,axes=[2,0,1])
 
-        print(image.shape)
-
-        tmp_input = MNN.Tensor((1, 3, cfg.DATA.hin, cfg.DATA.win ), MNN.Halide_Type_Float,\
+        ##mnn will transform the input type  as torch style (nchw)
+        tmp_input = MNN.Tensor((1,  cfg.DATA.hin, cfg.DATA.win,3 ), MNN.Halide_Type_Float,\
                         image, MNN.Tensor_DimensionType_Tensorflow)
-        #construct tensor from np.ndarray
+
+
         input_tensor.copyFrom(tmp_input)
 
         ### caution!!!!!!!!!!!!!!!! the model is nhwc
@@ -76,9 +76,6 @@ def inference(mnn_model_path,img_dir,thres=0.3):
             bbox = boxes[i]
             # print(bbox)
             if bbox[4]>thres:
-
-
-
                 cv2.rectangle(image_show, (int(bbox[0]), int(bbox[1])),
                               (int(bbox[2]), int(bbox[3])), (255, 0, 0), 4)
                 str_draw = '%s:%.2f' % (coco_map[int(bbox[5])][1], bbox[4])
