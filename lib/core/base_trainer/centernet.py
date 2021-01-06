@@ -50,8 +50,7 @@ class Net(nn.Module):
         # Convolution layers
         fms = self.model(inputs)
 
-        for xx in fms:
-            print(xx.size())
+        
         return fms[1:]
 
 
