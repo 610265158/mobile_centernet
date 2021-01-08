@@ -11,12 +11,7 @@ from train_config import config as cfg
 
 import timm
 
-def get_nearestup_weight(cin):
-    filt=torch.Tensor([[0, 0, 0, 0], [0, 1, 1, 0], [0, 1, 1, 0], [0, 0, 0, 0]])[None, None, ...]
-    weight = np.zeros((cin, cin, 4, 4),
-                      dtype=np.float64)
-    weight[range(cin), range(cin), :, :] = filt
-    return torch.from_numpy(weight).float()
+
 
 class SeparableConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=0, dilation=1, bias=False):
@@ -60,12 +55,12 @@ class ComplexUpsample(nn.Module):
 
         self.conv1 = nn.Sequential(SeparableConv2d(input_dim, outpt_dim, kernel_size=3, stride=1, padding=1, bias=False),
                                    nn.BatchNorm2d(outpt_dim),
-                                   nn.ReLU()
+                                   nn.ReLU(inplace=True)
                                    )
 
         self.conv2 = nn.Sequential(SeparableConv2d(input_dim, outpt_dim, kernel_size=5, stride=1, padding=2, bias=False),
                                    nn.BatchNorm2d(outpt_dim),
-                                   nn.ReLU()
+                                   nn.ReLU(inplace=True)
                                    )
 
     def forward(self, inputs):
@@ -76,12 +71,7 @@ class ComplexUpsample(nn.Module):
 
         z = x + y
 
-
-        n,c,h,w=z.size()
-
-
-
-        z = nn.functional.interpolate(z, scale_factor=2,mode='nearest' )
+        z = nn.functional.interpolate(z, scale_factor=2,mode='bilinear' )
 
         return z
 
@@ -96,24 +86,24 @@ class CenterNetHead(nn.Module):
 
         self.conv2 = nn.Sequential(SeparableConv2d(24, 64, kernel_size=5, stride=1, padding=2, bias=False),
                                    nn.BatchNorm2d(64),
-                                   nn.ReLU()
+                                   nn.ReLU(inplace=True)
                                    )
 
         self.conv3 = nn.Sequential(SeparableConv2d(32, 64, kernel_size=5, stride=1, padding=2, bias=False),
                                    nn.BatchNorm2d(64),
-                                   nn.ReLU()
+                                   nn.ReLU(inplace=True)
                                    )
         self.upsample3 = ComplexUpsample(128, 64)
 
         self.conv4 = nn.Sequential(SeparableConv2d(96, 64, kernel_size=5, stride=1, padding=2, bias=False),
                                    nn.BatchNorm2d(64),
-                                   nn.ReLU()
+                                   nn.ReLU(inplace=True)
                                    )
         self.upsample4 = ComplexUpsample(128, 64)
 
         self.conv5 = nn.Sequential(SeparableConv2d(320, 64, kernel_size=5, stride=1, padding=2, bias=False),
                                    nn.BatchNorm2d(64),
-                                   nn.ReLU()
+                                   nn.ReLU(inplace=True)
                                    )
         self.upsample5 = ComplexUpsample(320, 64)
 
@@ -272,7 +262,13 @@ if __name__ == '__main__':
     # a list here shorter than the number of inputs to the model, and we will
     # only set that subset of names, starting from the beginning.
 
-    torch.onnx.export(model, dummy_input, "classifier.onnx",opset_version=11)
+    torch.onnx.export(model,
+                      dummy_input,
+                      "centernet.onnx",
+                      opset_version=11,
+                      input_names=['image'],  # the model's input names
+                      output_names=['output'],  # the model's output names
+                      )
 
     import onnx
     from onnxsim import simplify
