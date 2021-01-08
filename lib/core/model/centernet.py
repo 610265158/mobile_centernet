@@ -71,7 +71,7 @@ class ComplexUpsample(nn.Module):
 
         z = x + y
 
-        z = nn.functional.interpolate(z, scale_factor=2,mode='bilinear' )
+        z = nn.functional.interpolate(z, scale_factor=2 )
 
         return z
 
@@ -163,14 +163,16 @@ class CenterNet(nn.Module):
         def nms(heat, kernel=3):
             ##fast
 
-            heat=heat.permute([0,2,3,1])
-            heat, clses = torch.max(heat, dim=3,keepdim=True)
+            heat = heat.permute([0, 2, 3, 1])
+            heat, clses = torch.max(heat, dim=3, keepdim=True)
 
-            heat = heat.permute([0, 3,1,2])
+            heat = heat.permute([0, 3, 1, 2])
             scores = torch.sigmoid(heat)
 
-            hmax = nn.MaxPool2d(kernel,1,padding=1)(scores)
-            keep = (scores == hmax).float()
+            hmax = nn.MaxPool2d(kernel, 1, padding=1)(scores)
+            # keep = (scores == hmax).float()
+            keep = (scores - hmax).float() + 1e-9
+            keep = nn.ReLU()(keep) * 1e9
             return scores * keep, clses
         def get_bboxes(wh):
 
