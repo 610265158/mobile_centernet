@@ -1,10 +1,8 @@
 import sys
 sys.path.append('.')
 import torch
-import torchvision
 
-
-from lib.core.base_trainer.centernet import CenterNet
+from lib.core.model.centernet import CenterNet
 
 import argparse
 
@@ -42,6 +40,18 @@ torch.onnx.export(model,
                   dummy_input,
                   "centernet.onnx",
                   opset_version=11,
-                  input_names=['input'],  # the model's input names
+                  input_names=['image'],  # the model's input names
                   output_names=['output'],  # the model's output names
                   )
+import onnx
+from onnxsim import simplify
+
+# load your predefined ONNX model
+model = onnx.load("centernet.onnx")
+
+# convert model
+model_simp, check = simplify(model)
+f = model_simp.SerializeToString()
+file = open("centernet.onnx", "wb")
+file.write(f)
+assert check, "Simplified ONNX model could not be validated"

@@ -79,9 +79,9 @@ class ComplexUpsample(nn.Module):
 
         n,c,h,w=z.size()
 
-        size=(2*h,2*w)
 
-        z = nn.functional.upsample(z, size=size,mode='nearest' )
+
+        z = nn.functional.interpolate(z, scale_factor=2,mode='nearest' )
 
         return z
 
@@ -94,24 +94,24 @@ class CenterNetHead(nn.Module):
     def __init__(self, ):
         super().__init__()
 
-        self.conv2 = nn.Sequential(SeparableConv2d(24, 64, kernel_size=3, stride=1, padding=1, bias=False),
+        self.conv2 = nn.Sequential(SeparableConv2d(24, 64, kernel_size=5, stride=1, padding=2, bias=False),
                                    nn.BatchNorm2d(64),
                                    nn.ReLU()
                                    )
 
-        self.conv3 = nn.Sequential(SeparableConv2d(32, 64, kernel_size=3, stride=1, padding=1, bias=False),
+        self.conv3 = nn.Sequential(SeparableConv2d(32, 64, kernel_size=5, stride=1, padding=2, bias=False),
                                    nn.BatchNorm2d(64),
                                    nn.ReLU()
                                    )
         self.upsample3 = ComplexUpsample(128, 64)
 
-        self.conv4 = nn.Sequential(SeparableConv2d(96, 64, kernel_size=3, stride=1, padding=1, bias=False),
+        self.conv4 = nn.Sequential(SeparableConv2d(96, 64, kernel_size=5, stride=1, padding=2, bias=False),
                                    nn.BatchNorm2d(64),
                                    nn.ReLU()
                                    )
         self.upsample4 = ComplexUpsample(128, 64)
 
-        self.conv5 = nn.Sequential(SeparableConv2d(320, 64, kernel_size=3, stride=1, padding=1, bias=False),
+        self.conv5 = nn.Sequential(SeparableConv2d(320, 64, kernel_size=5, stride=1, padding=2, bias=False),
                                    nn.BatchNorm2d(64),
                                    nn.ReLU()
                                    )
@@ -173,9 +173,11 @@ class CenterNet(nn.Module):
         def nms(heat, kernel=3):
             ##fast
 
-            score, clses = torch.max(heat, dim=1,keepdim=True)
+            heat=heat.permute([0,2,3,1])
+            heat, clses = torch.max(heat, dim=3,keepdim=True)
 
-            scores = torch.nn.functional.sigmoid(score)
+            heat = heat.permute([0, 3,1,2])
+            scores = torch.sigmoid(heat)
 
             hmax = nn.MaxPool2d(kernel,1,padding=1)(scores)
             keep = (scores == hmax).float()
@@ -183,10 +185,10 @@ class CenterNet(nn.Module):
         def get_bboxes(wh):
 
             ### decode the box
-            shifts_x = torch.range(0, (W - 1) * stride + 1, stride,
+            shifts_x = torch.arange(0, (W - 1) * stride + 1, stride,
                                    dtype=torch.int32)
 
-            shifts_y = torch.range(0, (H - 1) * stride + 1, stride,
+            shifts_y = torch.arange(0, (H - 1) * stride + 1, stride,
                                    dtype=torch.int32)
 
             x_range, y_range = torch.meshgrid(shifts_x, shifts_y)
@@ -195,7 +197,7 @@ class CenterNet(nn.Module):
 
             base_loc = torch.unsqueeze(base_loc, dim=0)
 
-            wh = wh * torch.from_numpy(np.array([1, 1, -1, -1]).reshape([1, 4, 1, 1]))
+            wh = wh * torch.tensor([1, 1, -1, -1],requires_grad=False).reshape([1, 4, 1, 1])
             pred_boxes = base_loc - wh
 
             return pred_boxes
@@ -270,5 +272,17 @@ if __name__ == '__main__':
     # a list here shorter than the number of inputs to the model, and we will
     # only set that subset of names, starting from the beginning.
 
-    torch.onnx.export(model, dummy_input, "classifier.onnx")
+    torch.onnx.export(model, dummy_input, "classifier.onnx",opset_version=11)
 
+    import onnx
+    from onnxsim import simplify
+
+    # load your predefined ONNX model
+    model = onnx.load("centernet.onnx")
+
+    # convert model
+    model_simp, check = simplify(model)
+    f = model_simp.SerializeToString()
+    file = open("centernet.onnx", "wb")
+    file.write(f)
+    assert check, "Simplified ONNX model could not be validated"

@@ -1,4 +1,4 @@
-from lib.core.base_trainer.centernet import CenterNet
+from lib.core.model.centernet import CenterNet
 
 import numpy as np
 import math

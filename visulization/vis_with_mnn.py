@@ -70,7 +70,7 @@ def inference(mnn_model_path,img_dir,thres=0.3):
 
         boxes=output_tensor['output'].getData()
 
-        boxes=np.reshape(boxes,newshape=[6400,6])
+        boxes=np.reshape(boxes,newshape=[100,6])
         print(boxes.shape)
         for i in range(len(boxes)):
             bbox = boxes[i]

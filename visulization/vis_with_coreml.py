@@ -52,11 +52,11 @@ def inference(model_path,img_dir,thres=0.3):
         image = image.astype(np.uint8)
         pil_img = PIL.Image.fromarray(image)
 
-        coreml_inputs = {'__input': pil_img}
+        coreml_inputs = {'image': pil_img}
 
         coreml_outputs = centernet_model.predict(coreml_inputs, useCPUOnly=True)
 
-        boxes=coreml_outputs['2887']
+        boxes=coreml_outputs['output']
 
         boxes=boxes[0]
         print(boxes.shape)

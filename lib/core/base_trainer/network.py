@@ -4,15 +4,11 @@ import time
 import os
 import cv2
 
-
-from train_config import config as cfg
 #from lib.dataset.dataietr import DataIter
 
-from lib.helper.logger import logger
-from lib.core.base_trainer.centernet import CenterNet
+from lib.core.model.centernet import CenterNet
 from lib.core.base_trainer.loss import CenterNetLoss
 from lib.core.utils.torch_utils import EMA
-import random
 from lib.dataset.dataietr import DataIter
 from lib.core.base_trainer.metric import *
 import torch
