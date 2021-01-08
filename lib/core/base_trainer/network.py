@@ -174,7 +174,7 @@ class Train(object):
             self.iter_num+=1
             time_cost_per_batch=time.time()-start
 
-            images_per_sec=cfg.TRAIN.batch_size/time_cost_per_batch
+            images_per_sec=cfg.TRAIN.batch_size*cfg.TRAIN.num_gpu/time_cost_per_batch
 
 
             if self.iter_num%cfg.TRAIN.log_interval==0:
