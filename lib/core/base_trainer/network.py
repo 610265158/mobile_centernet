@@ -312,7 +312,7 @@ class Train(object):
       current_model_saved_name='./model/centernet_epoch_%d_val_loss%.6f.pth'%(epoch,summary_loss_cls.avg+summary_loss_wh.avg)
 
       logger.info('A model saved to %s' % current_model_saved_name)
-      torch.save(self.model.state_dict(),current_model_saved_name)
+      torch.save(self.model.module.state_dict(),current_model_saved_name)
 
       ####switch back
       if cfg.TRAIN.ema:
