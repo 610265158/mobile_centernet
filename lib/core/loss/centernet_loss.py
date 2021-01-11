@@ -153,7 +153,7 @@ class CenterNetLoss(nn.Module):
 
         cious = 1 - cious
 
-
+        cious=torch.where(torch.isnan(cious), torch.full_like(cious, 0), cious)
         return torch.sum(cious * weight) / avg_factor
 
 

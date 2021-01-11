@@ -7,7 +7,7 @@ import cv2
 #from lib.dataset.dataietr import DataIter
 
 from lib.core.model.centernet import CenterNet
-from lib.core.base_trainer.loss import CenterNetLoss
+from lib.core.loss.centernet_loss import CenterNetLoss
 from lib.core.utils.torch_utils import EMA
 from lib.dataset.dataietr import DataIter
 from lib.core.base_trainer.metric import *
