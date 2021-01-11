@@ -33,11 +33,10 @@ class Net(nn.Module):
     def __init__(self, ):
         super().__init__()
 
-        # self.mean_tensor=torch.from_numpy(cfg.DATA.PIXEL_MEAN ).float().cuda()
-        # self.std_val_tensor = torch.from_numpy(cfg.DATA.PIXEL_STD).float().cuda()
-        # self.model = EfficientNet.from_pretrained(model_name='efficientnet-b0')
-        self.model = timm.create_model('mobilenetv2_100', pretrained=True, features_only=True)
-        # self.model = timm.create_model('hrnet_w32', pretrained=True)
+        if 'Mobilenetv2' in cfg.MODEL.net_structure:
+            self.model = timm.create_model('mobilenetv2_100', pretrained=True, features_only=True)
+        else:
+            raise NotImplementedError
 
     def forward(self, inputs):
         # do preprocess
@@ -84,13 +83,13 @@ class CenterNetHead(nn.Module):
     def __init__(self,input_dims=[24,32,96,320],head_dims=[128,128,128] ):
         super().__init__()
 
-        self.conv2 = nn.Sequential(SeparableConv2d(input_dims[0], head_dims[2]//2, kernel_size=5, stride=1, padding=2, bias=False),
-                                   nn.BatchNorm2d(head_dims[2]//2),
+        self.conv2 = nn.Sequential(SeparableConv2d(input_dims[0], head_dims[0]//2, kernel_size=5, stride=1, padding=2, bias=False),
+                                   nn.BatchNorm2d(head_dims[0]//2),
                                    nn.ReLU(inplace=True)
                                    )
 
 
-        self.upsample3 = ComplexUpsample(head_dims[1], head_dims[2]//2)
+        self.upsample3 = ComplexUpsample(head_dims[1], head_dims[0]//2)
 
         self.conv3 = nn.Sequential(SeparableConv2d(input_dims[1], head_dims[1] // 2, kernel_size=5, stride=1, padding=2, bias=False),
                                    nn.BatchNorm2d(64),
@@ -100,14 +99,16 @@ class CenterNetHead(nn.Module):
 
 
         self.conv4 = nn.Sequential(
-            SeparableConv2d(input_dims[2], head_dims[0] // 2, kernel_size=5, stride=1, padding=2, bias=False),
-            nn.BatchNorm2d(64),
+            SeparableConv2d(input_dims[2], head_dims[2] // 2, kernel_size=5, stride=1, padding=2, bias=False),
+            nn.BatchNorm2d(head_dims[2] // 2),
             nn.ReLU(inplace=True)
             )
-        self.upsample5 = ComplexUpsample(input_dims[3], head_dims[0]//2)
+        self.upsample5 = ComplexUpsample(input_dims[3], head_dims[2]//2)
 
-        self.cls =SeparableConv2d(head_dims[-1], 80, kernel_size=3, stride=1, padding=1, bias=True)
-        self.wh =SeparableConv2d(head_dims[-1], 4, kernel_size=3, stride=1, padding=1, bias=True)
+
+
+        self.cls =SeparableConv2d(head_dims[0], 80, kernel_size=3, stride=1, padding=1, bias=True)
+        self.wh =SeparableConv2d(head_dims[0], 4, kernel_size=3, stride=1, padding=1, bias=True)
 
 
 

@@ -27,7 +27,7 @@ config.TRAIN.init_lr=0.001
 config.TRAIN.warmup_step=1000
 config.TRAIN.opt='Adamw'
 config.TRAIN.weight_decay_factor = 1.e-5                  ##l2 regular
-config.TRAIN.vis=True                                    ##check data flag
+config.TRAIN.vis=False                                    ##check data flag
 
 if config.TRAIN.vis:
     config.TRAIN.mix_precision=False
@@ -65,9 +65,10 @@ config.DATA.alpha=0.54
 config.DATA.beta=0.54
 ##mobilenetv3 as basemodel
 config.MODEL = edict()
-config.MODEL.continue_train=False          ### revover from a trained model
+config.MODEL.net_structure='Mobilenetv2'
+
 config.MODEL.model_path = './model/'  # save directory
-config.MODEL.pretrained_model=None#'./v3-large-minimalistic_224_1.0_float/ema/model-342500'
+config.MODEL.pretrained_model=None
 config.MODEL.task='mscoco'
 config.MODEL.min_overlap=0.7
 config.MODEL.max_box= 100
@@ -76,8 +77,8 @@ config.MODEL.max_box= 100
 
 ##model params
 config.MODEL.global_stride=4
-config.MODEL.backbone_feature_dims=[24,32,96,320]
-config.MODEL.head_dims=[128,128,128]
+config.MODEL.backbone_feature_dims=[24,32,96,320]   ##c2,c3,c4,c5
+config.MODEL.head_dims=[128,128,128]                ## c2,c3,c4
 
 config.MODEL.freeze_bn=False
 
