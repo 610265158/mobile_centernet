@@ -92,10 +92,10 @@ class CenterNetHead(nn.Module):
         self.upsample3 = ComplexUpsample(head_dims[1], head_dims[0]//2)
 
         self.conv3 = nn.Sequential(SeparableConv2d(input_dims[1], head_dims[1] // 2, kernel_size=5, stride=1, padding=2, bias=False),
-                                   nn.BatchNorm2d(64),
+                                   nn.BatchNorm2d(head_dims[1] // 2),
                                    nn.ReLU(inplace=True)
                                    )
-        self.upsample4 = ComplexUpsample(head_dims[0], head_dims[1] // 2)
+        self.upsample4 = ComplexUpsample(head_dims[2], head_dims[1] // 2)
 
 
         self.conv4 = nn.Sequential(
