@@ -72,7 +72,11 @@ config.MODEL.task='mscoco'
 config.MODEL.min_overlap=0.7
 config.MODEL.max_box= 100
 
+
+
+##model params
 config.MODEL.global_stride=4
+config.MODEL.backbone_feature_dims=[24,32,96,320]
 config.MODEL.head_dims=[128,128,128]
 
 config.MODEL.freeze_bn=False

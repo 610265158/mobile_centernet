@@ -42,7 +42,7 @@ spec = mlmodel.get_spec()
 
 # Edit the spec
 ct.utils.rename_feature(spec, '__input', 'image')
-ct.utils.rename_feature(spec, '2574', 'output')
+ct.utils.rename_feature(spec, '2577', 'output')
 # save out the updated model
 mlmodel = ct.models.MLModel(spec)
 print(mlmodel)
@@ -53,7 +53,7 @@ from coremltools.models.neural_network import quantization_utils
 from coremltools.models.neural_network.quantization_utils import AdvancedQuantizedLayerSelector
 
 selector = AdvancedQuantizedLayerSelector(
-    skip_layer_types=['batchnorm', 'depthwiseConv'],
+    skip_layer_types=['batchnorm','bias', 'depthwiseConv'],
     minimum_conv_kernel_channels=4,
     minimum_conv_weight_count=4096
 )
