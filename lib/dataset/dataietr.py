@@ -457,6 +457,16 @@ class DsfdDataIter():
 
                 image=self.train_trans(image=image)['image']
 
+
+
+
+                boxes_cleaned=[]
+                for kk in range(boxes.shape[0]):
+                    box=boxes[kk]
+
+                    if not ((box[3] - box[1]) < cfg.DATA.cover_obj or (box[2] - box[0]) < cfg.DATA.cover_obj):
+                        boxes_cleaned.append(box)
+                boxes=np.array(boxes_cleaned)
                 ####
 
             else:

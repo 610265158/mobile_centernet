@@ -48,7 +48,7 @@ class CenterNetLoss(nn.Module):
 
         x_range, y_range = torch.meshgrid(shifts_x, shifts_y)
 
-        base_loc = torch.stack((x_range, y_range, x_range, y_range), axis=0)  # (h, w，4)
+        base_loc = torch.stack((x_range, y_range, x_range, y_range), axis=0)  # (h, w锛�4)
 
         base_loc = torch.unsqueeze(base_loc, dim=0).to(self.device)
 
