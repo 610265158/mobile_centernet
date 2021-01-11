@@ -16,6 +16,7 @@ class Detector:
         state_dict = torch.load(model_path, map_location=self.device)
         self.model.load_state_dict(state_dict, strict=False)
         self.model.eval()
+        self.model.to(self.device)
     def __call__(self, image, score_threshold=0.5,input_shape=(cfg.DATA.hin,cfg.DATA.win),max_boxes=1000):
         """Detect faces.
         Arguments:
@@ -47,14 +48,14 @@ class Detector:
         image_fornet = np.expand_dims(image, 0)
         image_fornet = np.transpose(image_fornet,axes=[0,3,1,2])
 
-        image_fornet=torch.from_numpy(image_fornet).float()
+        image_fornet=torch.from_numpy(image_fornet).float().to(self.device)
         output=self.model(image_fornet)
 
         outputs=output.detach().cpu().numpy()
 
         bboxes=outputs[0]
 
-        print(bboxes[0,...])
+
 
         bboxes = self.py_nms(np.array(bboxes), iou_thres=None, score_thres=score_threshold,max_boxes=max_boxes)
 
@@ -72,7 +73,7 @@ class Detector:
         bboxes = (bboxes - boxes_bias)*boxes_scaler
 
 
-        print(bboxes)
+
 
         # self.stats_graph(self._sess.graph)
         return bboxes
