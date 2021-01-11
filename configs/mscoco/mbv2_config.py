@@ -67,9 +67,6 @@ config.DATA.beta=0.54
 config.MODEL = edict()
 config.MODEL.continue_train=False          ### revover from a trained model
 config.MODEL.model_path = './model/'  # save directory
-config.MODEL.net_structure='MobilenetV3'
-config.MODEL.minimalistic=True
-config.MODEL.size=1.0
 config.MODEL.pretrained_model=None#'./v3-large-minimalistic_224_1.0_float/ema/model-342500'
 config.MODEL.task='mscoco'
 config.MODEL.min_overlap=0.7
@@ -77,13 +74,9 @@ config.MODEL.max_box= 100
 
 config.MODEL.global_stride=4
 config.MODEL.head_dims=[128,128,128]
-config.MODEL.prehead_dims=[128,48]   ##no pre head
 
 config.MODEL.freeze_bn=False
-config.MODEL.deployee= False    ### tensorflow, mnn, coreml
-if config.MODEL.deployee:
-    config.TRAIN.batch_size = 1
-    config.TRAIN.lock_basenet_bn=True
+
 
 
 

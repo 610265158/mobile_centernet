@@ -71,7 +71,7 @@ class ComplexUpsample(nn.Module):
 
         z = x + y
 
-        z = nn.functional.interpolate(z, scale_factor=2 )
+        z = nn.functional.interpolate(z, scale_factor=2,mode='bilinear' )
 
         return z
 
