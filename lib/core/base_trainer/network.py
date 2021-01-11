@@ -63,8 +63,8 @@ class Train(object):
     if cfg.TRAIN.mix_precision:
         self.model, self.optimizer = amp.initialize( self.model, self.optimizer, opt_level="O1")
 
-    if cfg.TRAIN.num_gpu>1:
-        self.model=nn.DataParallel(self.model)
+
+    self.model=nn.DataParallel(self.model)
 
     self.ema = EMA(self.model, 0.999)
 
