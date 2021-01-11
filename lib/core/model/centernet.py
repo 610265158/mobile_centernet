@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 from torch.nn import Parameter
-
+from lib.core.model.shufflenet import shufflenet_v2_x1_0
 from train_config import config as cfg
 
 import timm
@@ -35,6 +35,8 @@ class Net(nn.Module):
 
         if 'Mobilenetv2' in cfg.MODEL.net_structure:
             self.model = timm.create_model('mobilenetv2_100', pretrained=True, features_only=True)
+        elif 'ShuffleNetV2' in cfg.MODEL.net_structure:
+            self.model = shufflenet_v2_x1_0(pretrained=True)
         else:
             raise NotImplementedError
 
