@@ -41,13 +41,13 @@ class CenterNetLoss(nn.Module):
         avg_factor = torch.sum(mask) + 1e-4
 
         ### decode the box
-        shifts_x = torch.range(0, (W - 1) * base_step + 1, base_step,
+        shifts_x = torch.arange(0, (W - 1) * base_step + 1, base_step,
                                dtype=torch.int32)
 
-        shifts_y = torch.range(0, (H - 1) * base_step + 1, base_step,
+        shifts_y = torch.arange(0, (H - 1) * base_step + 1, base_step,
                                dtype=torch.int32)
 
-        x_range, y_range = torch.meshgrid(shifts_x, shifts_y)
+        y_range, x_range = torch.meshgrid(shifts_y, shifts_x)
 
         base_loc = torch.stack((x_range, y_range, x_range, y_range), axis=0)  # (h, w锛�4)
 
@@ -100,7 +100,7 @@ class CenterNetLoss(nn.Module):
                   target,
                   weight,
                   avg_factor=None,
-                  eps=1e-7):
+                  eps=1e-5):
         """GIoU loss.
         Computing the GIoU loss between a set of predicted bboxes and target bboxes.
         """
@@ -113,55 +113,48 @@ class CenterNetLoss(nn.Module):
         weight = weight[pos_mask].float()
         if avg_factor is None:
             avg_factor = torch.sum(pos_mask) + 1e-6
-        pred = torch.reshape(pred[pos_mask], (-1, 4)).float()
-        target = torch.reshape(target[pos_mask], (-1, 4)).float()
+        bboxes1 = torch.reshape(pred[pos_mask], (-1, 4)).float()
+        bboxes2 = torch.reshape(target[pos_mask], (-1, 4)).float()
 
-        lt = torch.max(pred[:, :2], target[:, :2])
-        rb = torch.min(pred[:, 2:], target[:, 2:])
-        wh = (rb - lt).clamp(min=0)
+
+
+        lt = torch.max(bboxes1[:, :2], bboxes2[:, :2])  # [rows, 2]
+        rb = torch.min(bboxes1[:, 2:], bboxes2[:, 2:])  # [rows, 2]
+        wh = (rb - lt + 1).clamp(min=0.)
+
+
         overlap = wh[:, 0] * wh[:, 1]
+        ap = (bboxes1[:, 2] - bboxes1[:, 0] + 1) * (bboxes1[:, 3] - bboxes1[:, 1] + 1)
+        ag = (bboxes2[:, 2] - bboxes2[:, 0] + 1) * (bboxes2[:, 3] - bboxes2[:, 1] + 1)
+        ious = overlap / (ap + ag - overlap)
 
-        # union
-        ap = (pred[:, 2] - pred[:, 0]) * (pred[:, 3] - pred[:, 1])
-        ag = (target[:, 2] - target[:, 0]) * (target[:, 3] - target[:, 1])
-        union = ap + ag - overlap + eps
+        # cal outer boxes
+        outer_left_up = torch.min(bboxes1[:, :2], bboxes2[:, :2])
+        outer_right_down = torch.max(bboxes1[:, 2:], bboxes2[:, 2:])
+        outer = (outer_right_down - outer_left_up).clamp(min=0)
 
-        # IoU
-        ious = overlap / union
+        outer_diagonal_line = (outer[:, 0])**2 + (outer[:, 1])**2
 
-        # enclose area
-        enclose_x1y1 = torch.min(pred[:, :2], target[:, :2])
-        enclose_x2y2 = torch.max(pred[:, 2:], target[:, 2:])
-        enclose_wh = (enclose_x2y2 - enclose_x1y1).clamp(min=0)
+        boxes1_center = (bboxes1[:, :2] + bboxes1[:, 2:] + 1) * 0.5
+        boxes2_center = (bboxes2[:, :2] + bboxes2[:, 2:] + 1) * 0.5
+        center_dis = (boxes1_center[:, 0] - boxes2_center[:, 0])**2 + \
+                     (boxes1_center[:, 1] - boxes2_center[:, 1])**2
 
-        cw = enclose_wh[:, 0]
-        ch = enclose_wh[:, 1]
+        boxes1_size = (bboxes1[:, 2:] - bboxes1[:, :2]).clamp(min=0)
+        boxes2_size = (bboxes2[:, 2:] - bboxes2[:, :2]).clamp(min=0)
 
-        c2 = cw ** 2 + ch ** 2 + eps
+        v = (4.0 / (np.pi ** 2)) * \
+            (torch.atan(boxes2_size[:, 0] / (boxes2_size[:, 1] + 0.00001)) -
+                      torch.atan(boxes1_size[:, 0] / (boxes1_size[:, 1] + 0.00001)))**2
 
-        b1_x1, b1_y1 = pred[:, 0], pred[:, 1]
-        b1_x2, b1_y2 = pred[:, 2], pred[:, 3]
-        b2_x1, b2_y1 = target[:, 0], target[:, 1]
-        b2_x2, b2_y2 = target[:, 2], target[:, 3]
+        S = (ious> 0.5).float()
+        alpha = S * v / (1 - ious + v)
 
-        w1, h1 = b1_x2 - b1_x1, b1_y2 - b1_y1 + eps
-        w2, h2 = b2_x2 - b2_x1, b2_y2 - b2_y1 + eps
+        cious = ious - (center_dis / outer_diagonal_line) - alpha * v
 
-        left = ((b2_x1 + b2_x2) - (b1_x1 + b1_x2)) ** 2 / 4
-        right = ((b2_y1 + b2_y2) - (b1_y1 + b1_y2)) ** 2 / 4
-        rho2 = left + right
-
-        factor = 4 / math.pi ** 2
-        v = factor * torch.pow(torch.atan(w2 / h2) - torch.atan(w1 / h1), 2)
-
-        # CIoU
-        cious = ious - (rho2 / c2 + v ** 2 / (1 - ious + v))
         cious = 1 - cious
 
 
-        cious = torch.where(torch.isnan(cious), torch.full_like(cious, 0), cious)
-
-        avg_factor=torch.clamp(avg_factor,1)
         return torch.sum(cious * weight) / avg_factor
 
 

@@ -116,7 +116,7 @@ class CenterNet(nn.Module):
             shifts_y = torch.arange(0, (H - 1) * stride + 1, stride,
                                    dtype=torch.int32)
 
-            x_range, y_range = torch.meshgrid(shifts_x, shifts_y)
+            y_range, x_range = torch.meshgrid(shifts_y, shifts_x)
 
             base_loc = torch.stack((x_range, y_range, x_range, y_range), axis=0)  # (h, w，4)
 
