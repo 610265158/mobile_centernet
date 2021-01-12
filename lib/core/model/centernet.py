@@ -7,34 +7,24 @@ import torch.nn.functional as F
 import torch.nn as nn
 from torch.nn import Parameter
 from lib.core.model.shufflenet import shufflenet_v2_x1_0
+
+
+from lib.core.model.fpn import Fpn
+
+from lib.core.model.utils import normal_init
+from lib.core.model.utils import SeparableConv2d
+
+
 from train_config import config as cfg
 
 import timm
-
-
-
-class SeparableConv2d(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=0, dilation=1, bias=False):
-        super(SeparableConv2d, self).__init__()
-
-        self.conv1 = nn.Sequential(nn.Conv2d(in_channels, in_channels, kernel_size, stride, padding, dilation, groups=in_channels,
-                                    bias=bias),
-                                    nn.BatchNorm2d(in_channels))
-        self.pointwise = nn.Conv2d(in_channels, out_channels, 1, 1, 0, 1, 1, bias=bias)
-
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.pointwise(x)
-        return x
-
 
 class Net(nn.Module):
     def __init__(self, ):
         super().__init__()
 
         if 'Mobilenetv2' in cfg.MODEL.net_structure:
-            self.model = timm.create_model('mobilenetv2_100', pretrained=True, features_only=True)
+            self.model = timm.create_model('mobilenetv2_100', pretrained=True, features_only=True,exportable=True)
         elif 'ShuffleNetV2' in cfg.MODEL.net_structure:
             self.model = shufflenet_v2_x1_0(pretrained=True)
         else:
@@ -46,72 +36,19 @@ class Net(nn.Module):
         # Convolution layers
         fms = self.model(inputs)
 
-        
+        # for ff in fms:
+        #     print(ff.size())
+
         return fms[1:]
 
-
-class ComplexUpsample(nn.Module):
-    def __init__(self, input_dim=128, outpt_dim=128):
-        super().__init__()
-
-        self.conv1 = nn.Sequential(SeparableConv2d(input_dim, outpt_dim, kernel_size=3, stride=1, padding=1, bias=False),
-                                   nn.BatchNorm2d(outpt_dim),
-                                   nn.ReLU(inplace=True)
-                                   )
-
-        self.conv2 = nn.Sequential(SeparableConv2d(input_dim, outpt_dim, kernel_size=5, stride=1, padding=2, bias=False),
-                                   nn.BatchNorm2d(outpt_dim),
-                                   nn.ReLU(inplace=True)
-                                   )
-
-    def forward(self, inputs):
-        # do preprocess
-
-        x = self.conv1(inputs)
-        y = self.conv2(inputs)
-
-        z = x + y
-
-        z = nn.functional.interpolate(z, scale_factor=2,mode='bilinear' )
-
-        return z
-
-def normal_init(module, mean=0, std=1, bias=0):
-    nn.init.normal_(module.weight, mean, std)
-    if hasattr(module, 'bias'):
-        nn.init.constant_(module.bias, bias)
-
 class CenterNetHead(nn.Module):
-    def __init__(self,input_dims=[24,32,96,320],head_dims=[128,128,128] ):
+    def __init__(self,head_dims=[128,128,128] ):
         super().__init__()
-
-        self.conv2 = nn.Sequential(SeparableConv2d(input_dims[0], head_dims[0]//2, kernel_size=5, stride=1, padding=2, bias=False),
-                                   nn.BatchNorm2d(head_dims[0]//2),
-                                   nn.ReLU(inplace=True)
-                                   )
-
-
-        self.upsample3 = ComplexUpsample(head_dims[1], head_dims[0]//2)
-
-        self.conv3 = nn.Sequential(SeparableConv2d(input_dims[1], head_dims[1] // 2, kernel_size=5, stride=1, padding=2, bias=False),
-                                   nn.BatchNorm2d(head_dims[1] // 2),
-                                   nn.ReLU(inplace=True)
-                                   )
-        self.upsample4 = ComplexUpsample(head_dims[2], head_dims[1] // 2)
-
-
-        self.conv4 = nn.Sequential(
-            SeparableConv2d(input_dims[2], head_dims[2] // 2, kernel_size=5, stride=1, padding=2, bias=False),
-            nn.BatchNorm2d(head_dims[2] // 2),
-            nn.ReLU(inplace=True)
-            )
-        self.upsample5 = ComplexUpsample(input_dims[3], head_dims[2]//2)
 
 
 
         self.cls =SeparableConv2d(head_dims[0], 80, kernel_size=3, stride=1, padding=1, bias=True)
         self.wh =SeparableConv2d(head_dims[0], 4, kernel_size=3, stride=1, padding=1, bias=True)
-
 
 
         normal_init(self.cls.pointwise, 0, 0.01,-2.19)
@@ -120,43 +57,36 @@ class CenterNetHead(nn.Module):
 
 
     def forward(self, inputs):
-        ##/24,32,96,320
-        c2, c3, c4, c5 = inputs
 
-        c5_upsample = self.upsample5(c5)
-        c4 = self.conv4(c4)
-        p4 = torch.cat([c4, c5_upsample], dim=1)
 
-        c4_upsample = self.upsample4(p4)
-        c3 = self.conv3(c3)
-        p3 = torch.cat([c3, c4_upsample], dim=1)
-
-        c3_upsample = self.upsample3(p3)
-        c2 = self.conv2(c2)
-        p2 = torch.cat([c2, c3_upsample], dim=1)
-
-        cls = self.cls(p2)
-        wh = self.wh(p2)
+        cls = self.cls(inputs)
+        wh = self.wh(inputs)
         return cls, wh
-
 
 class CenterNet(nn.Module):
     def __init__(self, inference=False,coreml=False ):
         super().__init__()
 
         self.backbone = Net()
-        self.head = CenterNetHead(head_dims=cfg.MODEL.head_dims,input_dims=cfg.MODEL.backbone_feature_dims)
+
+        self.fpn=Fpn(head_dims=cfg.MODEL.head_dims,input_dims=cfg.MODEL.backbone_feature_dims)
+
+        self.head = CenterNetHead(head_dims=cfg.MODEL.head_dims)
+
+
+        ### control params
         self.inference=inference
 
         self.coreml_=coreml
 
     def forward(self, inputs):
-        ##/24,32,96,320
-        fms = self.backbone(inputs)
 
-        # for ff in fms:
-        #     print(ff.size())
-        cls, wh = self.head(fms)
+        fms = self.backbone(inputs)
+        fpn_fm=self.fpn(fms)
+
+        cls, wh = self.head(fpn_fm)
+
+
         if not self.inference:
             return cls,wh*16
         else:
@@ -168,15 +98,14 @@ class CenterNet(nn.Module):
             ##fast
 
             heat = heat.permute([0, 2, 3, 1])
-            heat, clses = torch.max(heat, dim=3, keepdim=True)
+            heat, clses = torch.max(heat, dim=3)
 
-            heat = heat.permute([0, 3, 1, 2])
+            heat = heat.unsqueeze(1)
             scores = torch.sigmoid(heat)
 
             hmax = nn.MaxPool2d(kernel, 1, padding=1)(scores)
-            # keep = (scores == hmax).float()
-            keep = (scores - hmax).float() + 1e-9
-            keep = nn.ReLU()(keep) * 1e9
+            keep = (scores == hmax).float()
+
             return scores * keep, clses
         def get_bboxes(wh):
 
@@ -247,6 +176,13 @@ class CenterNet(nn.Module):
             detections = torch.cat([ pred_boxes,top_score, label_map], dim=2)
 
         return detections
+
+
+
+
+
+
+
 
 
 if __name__ == '__main__':
