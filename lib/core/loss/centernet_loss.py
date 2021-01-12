@@ -112,7 +112,7 @@ class CenterNetLoss(nn.Module):
         pos_mask = weight > 0
         weight = weight[pos_mask].float()
         if avg_factor is None:
-            avg_factor = torch.sum(pos_mask) + 1e-6
+            avg_factor = torch.sum(pos_mask) + eps
         bboxes1 = torch.reshape(pred[pos_mask], (-1, 4)).float()
         bboxes2 = torch.reshape(target[pos_mask], (-1, 4)).float()
 
@@ -144,8 +144,8 @@ class CenterNetLoss(nn.Module):
         boxes2_size = (bboxes2[:, 2:] - bboxes2[:, :2]).clamp(min=0)
 
         v = (4.0 / (np.pi ** 2)) * \
-            (torch.atan(boxes2_size[:, 0] / (boxes2_size[:, 1] + 0.00001)) -
-                      torch.atan(boxes1_size[:, 0] / (boxes1_size[:, 1] + 0.00001)))**2
+            (torch.atan(boxes2_size[:, 0] / (boxes2_size[:, 1] + eps)) -
+                      torch.atan(boxes1_size[:, 0] / (boxes1_size[:, 1] + eps)))**2
 
         S = (ious> 0.5).float()
         alpha = S * v / (1 - ious + v)
@@ -154,8 +154,15 @@ class CenterNetLoss(nn.Module):
 
         cious = 1 - cious
 
+        cious=cious*weight
 
-        return torch.sum(cious * weight) / avg_factor
+        ## filter out the nan loss
+        nan_index=~torch.isnan(cious)
+        
+        cious=cious[nan_index]
+
+
+        return torch.sum(cious) / avg_factor
 
 
 
