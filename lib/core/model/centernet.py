@@ -28,7 +28,7 @@ class Net(nn.Module):
         elif 'ShuffleNetV2' in cfg.MODEL.net_structure:
             self.model = shufflenet_v2_x1_0(pretrained=True)
         elif 'Resnet18' in cfg.MODEL.net_structure:
-            self.model = resnet18(pretrained=False)
+            self.model = resnet18(pretrained=True)
         else:
             raise NotImplementedError
 
