@@ -40,16 +40,16 @@ class Fpn(nn.Module):
 
 
 
-        self.latlayer2=nn.Sequential(SeparableConv2d(input_dims[0],head_dims[0]//2),
+        self.latlayer2=nn.Sequential(SeparableConv2d(input_dims[0],head_dims[0]//2,kernel_size=5,padding=2),
                                       nn.BatchNorm2d(head_dims[0]//2),
                                       nn.ReLU(inplace=True))
 
 
-        self.latlayer3=nn.Sequential(SeparableConv2d(input_dims[1],head_dims[1]//2),
+        self.latlayer3=nn.Sequential(SeparableConv2d(input_dims[1],head_dims[1]//2,kernel_size=5,padding=2),
                                       nn.BatchNorm2d(head_dims[1]//2),
                                       nn.ReLU(inplace=True))
 
-        self.latlayer4 = nn.Sequential(SeparableConv2d(input_dims[2], head_dims[2] // 2),
+        self.latlayer4 = nn.Sequential(SeparableConv2d(input_dims[2], head_dims[2] // 2,kernel_size=5,padding=2),
                                        nn.BatchNorm2d(head_dims[2] // 2),
                                        nn.ReLU(inplace=True))
 
