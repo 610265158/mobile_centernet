@@ -27,7 +27,7 @@ config.TRAIN.init_lr=0.001
 config.TRAIN.warmup_step=1000
 config.TRAIN.opt='Adamw'
 config.TRAIN.weight_decay_factor = 1.e-5                  ##l2 regular
-config.TRAIN.vis=True                                    ##check data flag
+config.TRAIN.vis=False                                    ##check data flag
 
 if config.TRAIN.vis:
     config.TRAIN.mix_precision=False

@@ -38,8 +38,8 @@ class Net(nn.Module):
         # Convolution layers
         fms = self.model(inputs)
 
-        for ff in fms:
-            print(ff.size())
+        # for ff in fms:
+        #     print(ff.size())
 
         return fms[1:]
 
