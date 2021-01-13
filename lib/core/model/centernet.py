@@ -79,7 +79,7 @@ class CenterNet(nn.Module):
 
         self.coreml_=coreml
         if cfg.MODEL.global_stride==8:
-            self.extra_conv=nn.Sequential(nn.Conv2d(cfg.MODEL.backbone_feature_dims[-2],cfg.MODEL.backbone_feature_dims[-1],
+            self.extra_conv=nn.Sequential(SeparableConv2d(cfg.MODEL.backbone_feature_dims[-2],cfg.MODEL.backbone_feature_dims[-1],
                                                     kernel_size=3,stride=2,padding=1),
                                           nn.BatchNorm2d(cfg.MODEL.backbone_feature_dims[-1]),
                                           nn.ReLU(inplace=True))
