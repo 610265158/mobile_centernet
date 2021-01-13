@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 from torch.nn import Parameter
 from lib.core.model.shufflenet import shufflenet_v2_x1_0
-
+from lib.core.model.resnet import resnet18
 
 from lib.core.model.fpn import Fpn
 
@@ -27,6 +27,8 @@ class Net(nn.Module):
             self.model = timm.create_model('mobilenetv2_100', pretrained=True, features_only=True,exportable=True)
         elif 'ShuffleNetV2' in cfg.MODEL.net_structure:
             self.model = shufflenet_v2_x1_0(pretrained=True)
+        elif 'Resnet18' in cfg.MODEL.net_structure:
+            self.model = resnet18(pretrained=False)
         else:
             raise NotImplementedError
 
@@ -36,8 +38,8 @@ class Net(nn.Module):
         # Convolution layers
         fms = self.model(inputs)
 
-        # for ff in fms:
-        #     print(ff.size())
+        for ff in fms:
+            print(ff.size())
 
         return fms[1:]
 

@@ -27,7 +27,7 @@ config.TRAIN.init_lr=0.001
 config.TRAIN.warmup_step=1000
 config.TRAIN.opt='Adamw'
 config.TRAIN.weight_decay_factor = 1.e-5                  ##l2 regular
-config.TRAIN.vis=False                                    ##check data flag
+config.TRAIN.vis=True                                    ##check data flag
 
 if config.TRAIN.vis:
     config.TRAIN.mix_precision=False
@@ -65,7 +65,7 @@ config.DATA.alpha=0.54
 config.DATA.beta=0.54
 ##mobilenetv3 as basemodel
 config.MODEL = edict()
-config.MODEL.net_structure='Mobilenetv2'
+config.MODEL.net_structure='Resnet18'
 
 config.MODEL.model_path = './model/'  # save directory
 config.MODEL.pretrained_model=None
@@ -77,11 +77,11 @@ config.MODEL.max_box= 100
 
 ##model params
 config.MODEL.global_stride=4
-config.MODEL.backbone_feature_dims=[24,32,96,320]   ##c2,c3,c4,c5
-config.MODEL.head_dims=[128,192,256]                ## c2,c3,c4
+config.MODEL.backbone_feature_dims=[64,128,256,512]   ##c2,c3,c4,c5
+config.MODEL.head_dims=[256,256,256]                ## c2,c3,c4
 
 if config.MODEL.global_stride==8:
-    config.MODEL.backbone_feature_dims = [ 32, 96, 320,480]  ##c3,c4,c5,c6
+    config.MODEL.backbone_feature_dims = [128,256,512,512]  ##c3,c4,c5,c6
 
 
 config.MODEL.freeze_bn=False
