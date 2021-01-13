@@ -67,6 +67,17 @@ class CenterNet(nn.Module):
     def __init__(self, inference=False,coreml=False ):
         super().__init__()
 
+
+        self.down_ratio=cfg.MODEL.global_stride
+
+        ### control params
+        self.inference = inference
+
+        self.coreml_ = coreml
+
+
+
+        ###model structure
         self.backbone = Net()
 
         self.fpn=Fpn(head_dims=cfg.MODEL.head_dims,input_dims=cfg.MODEL.backbone_feature_dims)
@@ -74,11 +85,8 @@ class CenterNet(nn.Module):
         self.head = CenterNetHead(head_dims=cfg.MODEL.head_dims)
 
 
-        ### control params
-        self.inference=inference
 
-        self.coreml_=coreml
-        if cfg.MODEL.global_stride==8:
+        if self.down_ratio==8:
             self.extra_conv=nn.Sequential(SeparableConv2d(cfg.MODEL.backbone_feature_dims[-2],cfg.MODEL.backbone_feature_dims[-1],
                                                     kernel_size=3,stride=2,padding=1),
                                           nn.BatchNorm2d(cfg.MODEL.backbone_feature_dims[-1]),
@@ -107,7 +115,7 @@ class CenterNet(nn.Module):
         if not self.inference:
             return cls,wh*16
         else:
-            detections = self.decode(cls, wh*16, 4)
+            detections = self.decode(cls, wh*16, self.down_ratio)
             return detections
 
     def decode(self, heatmap, wh, stride, K=100):
