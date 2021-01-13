@@ -78,10 +78,27 @@ class CenterNet(nn.Module):
         self.inference=inference
 
         self.coreml_=coreml
+        if cfg.MODEL.global_stride==8:
+            self.extra_conv=nn.Sequential(nn.Conv2d(cfg.MODEL.backbone_feature_dims[-2],cfg.MODEL.backbone_feature_dims[-1],
+                                                    kernel_size=3,stride=2,padding=1),
+                                          nn.BatchNorm2d(cfg.MODEL.backbone_feature_dims[-1]),
+                                          nn.ReLU(inplace=True))
+        else:
+            self.extra_conv=None
 
+
+
+        self.device=torch.device("cuda" if torch.cuda.is_available() else 'cpu')
     def forward(self, inputs):
 
         fms = self.backbone(inputs)
+
+        if self.extra_conv is not None:
+
+            extra_fm=self.extra_conv(fms[-1])
+            fms.append(extra_fm)
+            fms=fms[1:]
+
         fpn_fm=self.fpn(fms)
 
         cls, wh = self.head(fpn_fm)
@@ -120,9 +137,9 @@ class CenterNet(nn.Module):
 
             base_loc = torch.stack((x_range, y_range, x_range, y_range), axis=0)  # (h, w，4)
 
-            base_loc = torch.unsqueeze(base_loc, dim=0)
+            base_loc = torch.unsqueeze(base_loc, dim=0).to(self.device)
 
-            wh = wh * torch.tensor([1, 1, -1, -1],requires_grad=False).reshape([1, 4, 1, 1])
+            wh = wh * torch.tensor([1, 1, -1, -1],requires_grad=False).reshape([1, 4, 1, 1]).to(self.device)
             pred_boxes = base_loc - wh
 
             return pred_boxes

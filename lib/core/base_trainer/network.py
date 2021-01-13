@@ -227,11 +227,11 @@ class Train(object):
                 batch_size = data.shape[0]
 
 
-
-                cls, wh = self.model(data)
+                with torch.no_grad():
+                    cls, wh = self.model(data)
 
                 cls_loss,wh_loss = self.criterion([cls,wh], [hm_target, wh_target, weights])
-                loss=cls_loss+wh_loss
+
                 summary_loss_cls.update(cls_loss.detach().item(), batch_size)
                 summary_loss_wh.update(wh_loss.detach().item(), batch_size)
 

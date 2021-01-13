@@ -49,7 +49,9 @@ class Detector:
         image_fornet = np.transpose(image_fornet,axes=[0,3,1,2])
 
         image_fornet=torch.from_numpy(image_fornet).float().to(self.device)
-        output=self.model(image_fornet)
+
+        with torch.no_grad():
+            output=self.model(image_fornet)
 
         outputs=output.detach().cpu().numpy()
 

@@ -76,9 +76,12 @@ config.MODEL.max_box= 100
 
 
 ##model params
-config.MODEL.global_stride=4
-config.MODEL.backbone_feature_dims=[24,116,232,464]   ##c2,c3,c4,c5
+config.MODEL.global_stride=8
+config.MODEL.backbone_feature_dims=[24,32,96,320]   ##c2,c3,c4,c5
 config.MODEL.head_dims=[128,192,256]                ## c2,c3,c4
+
+if config.MODEL.global_stride==8:
+    config.MODEL.backbone_feature_dims = [ 32, 96, 320,480]  ##c3,c4,c5,c6
 
 config.MODEL.freeze_bn=False
 
