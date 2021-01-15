@@ -2,7 +2,7 @@
 
 ## introduction
 
-This is a tensorflow implement mobilenetv3-centernet framework,
+This is a pytorch implement mobilenet-centernet framework,
 which can be easily deployeed on Android(MNN) and IOS(CoreML) mobile devices, end to end.
 
 Purpose: Light detection algorithms that work on mobile devices is widely used, 
@@ -18,10 +18,11 @@ So there is an easy project contains model training and model converter.
 ### mscoco
 
 no test time augmentation.
+
 | model                     |input_size |map      | map@0.5|map@0.75|
 | :------:                  |:------:   |:------:  |:------:  |:------:  |
-|[mbv3-large-0.75-modified_head](https://drive.google.com/drive/folders/13zvokhOmfSexXNt6fDeFvjedllvLMJfZ?usp=sharing)  |512x512     | 0.251| 0.423|0.258  |
-
+|[mbv2_100-centernet_stride8](https://drive.google.com/drive/folders/1wYcoPsa5boK-TEeyuJbQuYdOoY6NbWc5?usp=sharing)  |512x512     | 0.224| 0.383|0.228  |
+|[mbv2_100-centernet_stride4](https://drive.google.com/drive/folders/1CJdX4XXcmEGdHEAMWg1sJ4CH-h2VKTNj?usp=sharing)  |512x512     | 0.234| 0.385|0.242  |
 
 ## requirment
 
@@ -63,14 +64,9 @@ python model_eval/custome_eval.py [--model [TRAINED_MODEL]] [--annFile [cocostyl
 python model_eval/custome_eval.py --model model/detector.pb
                                 --annFile ../mscoco/annotations/instances_val2017.json
                                 --imgDir ../mscoco/val2017
-                                --is_show 1
 
 ps, no test time augmentation is used.
 ```
-
-
-### finetune
-
 
 
 ### visualization
@@ -101,7 +97,8 @@ I have carefully processed the postprocess, and it can works within the model, s
         `python visualization/vis_with_mnn.py --mnn_model centernet.mnn --imgDir 'your image dir'`
 
 4.2 coreml
-
+    
+    ##some bugs in coremltools now, convert carefully. try to find the answer in coremltools issue
     + 4.2.1 convert
 
         `python tools/converter_to_coreml.py --model your.pth`
@@ -111,6 +108,3 @@ I have carefully processed the postprocess, and it can works within the model, s
         `python visualization/vis_with_coreml.py --coreml_model centernet.mlmodel --imgDir 'your image dir'`
 
 
-
-### TODO: 
-- [ ] Android project.
