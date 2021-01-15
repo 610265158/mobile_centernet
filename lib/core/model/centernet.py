@@ -41,7 +41,7 @@ class Net(nn.Module):
         # for ff in fms:
         #     print(ff.size())
 
-        return fms[1:]
+        return fms[-4:]
 
 class CenterNetHead(nn.Module):
     def __init__(self,head_dims=[128,128,128] ):
