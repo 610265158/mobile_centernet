@@ -5,11 +5,12 @@ import os
 import cv2
 
 #from lib.dataset.dataietr import DataIter
+from torch.utils.data import DataLoader
 
 from lib.core.model.centernet import CenterNet
 from lib.core.loss.centernet_loss import CenterNetLoss
 from lib.core.utils.torch_utils import EMA
-from lib.dataset.dataietr import DataIter
+from lib.dataset.dataietr import AlaskaDataIter
 from lib.core.base_trainer.metric import *
 import torch
 
@@ -26,8 +27,21 @@ class Train(object):
 
   def __init__(self,):
 
-    self.train_ds = DataIter(cfg.DATA.root_path, cfg.DATA.train_txt_path, training_flag=True)
-    self.val_ds = DataIter(cfg.DATA.root_path, cfg.DATA.val_txt_path, training_flag=False)
+
+
+
+    trainds = AlaskaDataIter(cfg.DATA.root_path, cfg.DATA.train_txt_path, training_flag=True)
+    self.train_ds = DataLoader(trainds,
+                          cfg.TRAIN.batch_size,
+                          num_workers=cfg.TRAIN.process_num,
+                          shuffle=True)
+
+    valds = AlaskaDataIter(cfg.DATA.root_path, cfg.DATA.val_txt_path, training_flag=False)
+    self.val_ds = DataLoader(valds,
+                         cfg.TRAIN.batch_size,
+                         num_workers=cfg.TRAIN.process_num,
+                         shuffle=False)
+
 
 
     self.init_lr=cfg.TRAIN.init_lr
@@ -52,7 +66,7 @@ class Train(object):
                                          weight_decay=self.l2_regularization)
     else:
       self.optimizer = torch.optim.SGD(self.model.parameters(),
-                                       lr=0.001,
+                                       lr=self.init_lr,
                                        momentum=0.9,
                                        weight_decay=self.l2_regularization)
 
@@ -102,7 +116,7 @@ class Train(object):
                   if cfg.MODEL.freeze_bn_affine:
                       m.weight.requires_grad = False
                       m.bias.requires_grad = False
-      for step in range(self.train_ds.size):
+      for image,hm_target, wh_target,weights in self.train_ds:
 
         if epoch_num<10:
             ###excute warm up in the first epoch
@@ -116,15 +130,16 @@ class Train(object):
 
         start=time.time()
 
-        image,hm_target, wh_target,weights = next(self.train_ds)
-
 
         if cfg.TRAIN.vis:
             for i in range(image.shape[0]):
 
-                img = image[i]
-                hm = hm_target[i]
-                wh = wh_target[i]
+
+
+                img = image[i].numpy()
+                img = np.transpose(img,axes=[1,2,0])
+                hm = hm_target[i].numpy()
+                wh = wh_target[i].numpy()
 
                 if cfg.DATA.use_int8_data:
                     hm = hm[:, :, 0].astype(np.uint8)
@@ -143,13 +158,13 @@ class Train(object):
         else:
             data = torch.from_numpy(image).to(self.device).float()
 
-            data =data.permute([0,3,1,2])
+
             if cfg.DATA.use_int8_data:
-                hm_target = torch.from_numpy(hm_target).to(self.device).float()/cfg.DATA.use_int8_enlarge
+                hm_target = hm_target.to(self.device).float()/cfg.DATA.use_int8_enlarge
             else:
-                hm_target = torch.from_numpy(hm_target).to(self.device).float()
-            wh_target = torch.from_numpy(wh_target).to(self.device).float()
-            weights = torch.from_numpy(weights).to(self.device).float()
+                hm_target = hm_target.to(self.device).float()
+            wh_target = wh_target.to(self.device).float()
+            weights = weights.to(self.device).float()
 
             batch_size = data.shape[0]
 
@@ -209,21 +224,19 @@ class Train(object):
         self.model.eval()
         t = time.time()
         with torch.no_grad():
-            for step in range(self.val_ds.size):
-                image,hm_target, wh_target,weights= next(self.val_ds)
+            for step,(image,hm_target, wh_target,weights) in enumerate(self.train_ds):
 
-                data = torch.from_numpy(image).to(self.device).float()
 
-                ##nhwc to nchw
-                data = data.permute([0, 3, 1, 2])
+                data = image.to(self.device).float()
+
 
                 if cfg.DATA.use_int8_data:
-                    hm_target = torch.from_numpy(hm_target).to(self.device).float() / cfg.DATA.use_int8_enlarge
+                    hm_target = hm_target.to(self.device).float() / cfg.DATA.use_int8_enlarge
                 else:
-                    hm_target = torch.from_numpy(hm_target).to(self.device).float()
+                    hm_target = hm_target.to(self.device).float()
 
-                wh_target = torch.from_numpy(wh_target).to(self.device).float()
-                weights = torch.from_numpy(weights).to(self.device).float()
+                wh_target = wh_target.to(self.device).float()
+                weights = weights.to(self.device).float()
                 batch_size = data.shape[0]
 
 

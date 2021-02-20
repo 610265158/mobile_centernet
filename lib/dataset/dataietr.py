@@ -67,261 +67,9 @@ class data_info():
         random.shuffle(self.metas)
         return self.metas
 
-class MutiScaleBatcher(BatchData):
 
-    def __init__(self, ds, batch_size,
-                 remainder=False,
-                 use_list=False,
-                 scale_range=None,
-                 input_size=(512,512),
-                 divide_size=32,
-                 is_training=True):
-        """
-        Args:
-            ds (DataFlow): A dataflow that produces either list or dict.
-                When ``use_list=False``, the components of ``ds``
-                must be either scalars or :class:`np.ndarray`, and have to be consistent in shapes.
-            batch_size(int): batch size
-            remainder (bool): When the remaining datapoints in ``ds`` is not
-                enough to form a batch, whether or not to also produce the remaining
-                data as a smaller batch.
-                If set to False, all produced datapoints are guaranteed to have the same batch size.
-                If set to True, `len(ds)` must be accurate.
-            use_list (bool): if True, each component will contain a list
-                of datapoints instead of an numpy array of an extra dimension.
-        """
-        super(BatchData, self).__init__(ds)
-        if not remainder:
-            try:
-                assert batch_size <= len(ds)
-            except NotImplementedError:
-                pass
 
-        self.batch_size = int(batch_size)
-        self.remainder = remainder
-        self.use_list = use_list
-
-        self.scale_range=scale_range
-        self.divide_size=divide_size
-
-        self.input_size=input_size
-        self.traing_flag=is_training
-
-
-
-        self.target_producer=CenternetDatasampler()
-    def __iter__(self):
-        """
-        Yields:
-            Batched data by stacking each component on an extra 0th dimension.
-        """
-
-        ##### pick a scale and shape aligment
-
-        holder = []
-        for data in self.ds:
-
-            image,boxes_,klass_=data[0],data[1],data[2]
-
-
-
-
-            data=[image,boxes_,klass_]
-            holder.append(data)
-
-            ### do crazy crop
-
-            if random.uniform(0,1)<cfg.DATA.cracy_crop and self.traing_flag:
-                if len(holder) == self.batch_size:
-                    crazy_holder=[]
-                    for i in range(0,len(holder),4):
-
-                        crazy_iamge=np.zeros(shape=(2*cfg.DATA.hin,2*cfg.DATA.win,3),dtype=holder[i][0].dtype)
-
-                        crazy_iamge[:cfg.DATA.hin,:cfg.DATA.win,:]=holder[i][0]
-                        crazy_iamge[:cfg.DATA.hin, cfg.DATA.win:, :] = holder[i+1][0]
-                        crazy_iamge[cfg.DATA.hin:, :cfg.DATA.win, :] = holder[i+2][0]
-                        crazy_iamge[cfg.DATA.hin:, cfg.DATA.win:, :] = holder[i+3][0]
-
-
-
-                        holder[i +1][1][:,[0, 2]]=holder[i +1][1][:,[0,2]]+cfg.DATA.win
-
-                        holder[i + 2][1][:,[1, 3]] = holder[i + 2][1][:,[1, 3]] + cfg.DATA.hin
-
-                        holder[i + 3][1][:,[0, 2]] = holder[i + 3][1][:,[0, 2]] + cfg.DATA.win
-                        holder[i + 3][1][:,[1, 3]] = holder[i + 3][1][:,[1, 3]] + cfg.DATA.hin
-
-
-
-                        tmp_bbox=np.concatenate((holder[i][1],
-                                                holder[i+1][1],
-                                                holder[i+2][1],
-                                                holder[i+3][1]),
-                                                axis=0)
-
-
-
-                        tmp_klass = np.concatenate((holder[i][2] ,
-                                                   holder[i + 1][2],
-                                                   holder[i + 2][2],
-                                                   holder[i + 3][2]),
-                                                    axis=0)
-
-                        ### do random crop 4 times:
-                        for j in range(4):
-
-                            curboxes=tmp_bbox.copy()
-                            cur_klasses=tmp_klass.copy()
-                            start_h=random.randint(0,cfg.DATA.hin)
-                            start_w = random.randint(0, cfg.DATA.win)
-
-                            cur_img_block=np.array(crazy_iamge[start_h:start_h+cfg.DATA.hin,start_w:start_w+cfg.DATA.win,:])
-
-                            for k in range(len(curboxes)):
-                                curboxes[k][0] = curboxes[k][0] - start_w
-                                curboxes[k][1] = curboxes[k][1] - start_h
-                                curboxes[k][2] = curboxes[k][2] - start_w
-                                curboxes[k][3] = curboxes[k][3] - start_h
-
-                            curboxes[:,[0, 2]] = np.clip(curboxes[:,[0, 2]], 0, cfg.DATA.win - 1)
-                            curboxes[:,[1, 3]] = np.clip(curboxes[:,[1, 3]], 0, cfg.DATA.hin - 1)
-                            ###cove the small faces
-
-
-
-
-                            boxes_clean=[]
-                            klsses_clean=[]
-                            for k in range(curboxes.shape[0]):
-                                box = curboxes[k]
-
-                                if not ((box[3] - box[1]) < cfg.DATA.cover_obj or (
-                                        box[2] - box[0]) < cfg.DATA.cover_obj):
-
-                                    boxes_clean.append(curboxes[k])
-                                    klsses_clean.append(cur_klasses[k])
-
-                            boxes_clean=np.array(boxes_clean)
-                            klsses_clean=np.array(klsses_clean)
-
-
-                            crazy_holder.append([cur_img_block,boxes_clean,klsses_clean])
-
-                    del holder
-
-                    holder=crazy_holder
-
-
-            if len(holder) == self.batch_size:
-                target = self.produce_target(holder)
-
-                yield BatchData.aggregate_batch(target, self.use_list)
-                del holder[:]
-
-        if self.remainder and len(holder) > 0:
-            yield BatchData._aggregate_batch(holder, self.use_list)
-
-
-
-    def produce_target(self,holder):
-        alig_data = []
-
-        if self.scale_range is not None:
-            max_shape = [random.randint(*self.scale_range),random.randint(*self.scale_range)]
-
-            max_shape[0] = int(np.ceil(max_shape[0] / self.divide_size) * self.divide_size)
-            max_shape[1] = int(np.ceil(max_shape[1] / self.divide_size) * self.divide_size)
-
-        else:
-            max_shape=self.input_size
-
-        # copy images to the upper left part of the image batch object
-        for [image, boxes_, klass_] in holder:
-
-
-
-            ### we do in map_function
-            # image,boxes_=self.align_resize(image,boxes_,target_height=max_shape[0],target_width=max_shape[1])
-            #
-            # # construct an image batch object
-            # image, shift_x, shift_y = self.place_image(image, target_height=max_shape[0], target_width=max_shape[1])
-            # boxes_[:, 0:4] = boxes_[:, 0:4] + np.array([shift_x, shift_y, shift_x, shift_y], dtype='float32')
-            #image = image.astype(np.uint8)
-
-
-            if cfg.TRAIN.vis:
-                for __box in boxes_:
-
-                    cv2.rectangle(image, (int(__box[0]), int(__box[1])),
-                                  (int(__box[2]), int(__box[3])), (255, 0, 0), 4)
-
-            heatmap, wh_map,weight = self.target_producer.ttfnet_centernet_datasampler(image,boxes_, klass_)
-
-            if cfg.DATA.channel==1:
-                image=cv2.cvtColor(image,cv2.COLOR_RGB2GRAY)
-                image=np.expand_dims(image,-1)
-
-            alig_data.append([image,heatmap, wh_map,weight])
-
-        return alig_data
-
-
-
-    def place_image(self,img_raw,target_height,target_width):
-
-
-
-        channel = img_raw.shape[2]
-        raw_height = img_raw.shape[0]
-        raw_width = img_raw.shape[1]
-
-
-
-        start_h=random.randint(0,target_height-raw_height)
-        start_w=random.randint(0,target_width-raw_width)
-
-        img_fill = np.zeros([target_height,target_width,channel], dtype=img_raw.dtype)
-        img_fill[start_h:start_h+raw_height,start_w:start_w+raw_width]=img_raw
-
-        return img_fill,start_w,start_h
-
-    def align_resize(self,img_raw,boxes,target_height,target_width):
-        ###sometimes use in objs detects
-        h, w, c = img_raw.shape
-
-
-        scale_y = target_height / h
-        scale_x = target_width / w
-
-        scale = min(scale_x, scale_y)
-
-        image = cv2.resize(img_raw, None, fx=scale, fy=scale)
-        boxes[:,:4]=boxes[:,:4]*scale
-
-        return image, boxes
-
-
-    def produce_for_centernet(self,image,boxes,klass,num_klass=cfg.DATA.num_class):
-        # hm,reg_hm=produce_heatmaps_with_bbox(image,boxes,klass,num_klass)
-        heatmap, wh,reg,ind,reg_mask = produce_heatmaps_with_bbox_official(image, boxes, klass, num_klass)
-        return heatmap, wh,reg,ind,reg_mask
-
-
-    def make_safe_box(self,image,boxes):
-        h,w,c=image.shape
-
-        boxes[boxes[:,0]<0]=0
-        boxes[boxes[:, 1] < 0] = 0
-        boxes[boxes[:, 2] >w] = w-1
-        boxes[boxes[:, 3] >h] = h-1
-        return boxes
-
-
-
-
-
-class DsfdDataIter():
+class AlaskaDataIter():
 
     def __init__(self, img_root_path='', ann_file=None, training_flag=True, shuffle=True):
 
@@ -348,14 +96,12 @@ class DsfdDataIter():
                                       ], p=0.7)
                                       ])
 
-    def __iter__(self):
-        idxs = np.arange(len(self.lst))
+        self.target_producer = CenternetDatasampler()
 
-        while True:
-            if self.shuffle:
-                np.random.shuffle(idxs)
-            for k in idxs:
-                yield self._map_func(self.lst[k], self.training_flag)
+
+    def __getitem__(self, item):
+
+        return self._map_func(self.lst[item], self.training_flag)
 
     def __len__(self):
         return len(self.lst)
@@ -504,7 +250,9 @@ class DsfdDataIter():
             boxes_ = np.array([[0, 0, -1, -1]])
             klass_ = np.array([0])
 
-        return image, boxes_, klass_
+        heatmap, wh_map, weight = self.target_producer.ttfnet_centernet_datasampler(image, boxes_, klass_)
+        image=np.transpose(image,axes=[2,0,1])
+        return image, heatmap, wh_map, weight
 
     def _get_border(self, border, size):
         i = 1
@@ -513,50 +261,4 @@ class DsfdDataIter():
         return border // i
 
 
-
-class DataIter():
-    def __init__(self, img_root_path='', ann_file=None, training_flag=True):
-
-        self.shuffle = True
-        self.training_flag = training_flag
-
-        self.num_gpu = cfg.TRAIN.num_gpu
-        self.batch_size = cfg.TRAIN.batch_size
-        self.process_num = cfg.TRAIN.process_num
-        self.prefetch_size = cfg.TRAIN.prefetch_size
-
-        self.generator = DsfdDataIter(img_root_path, ann_file, self.training_flag )
-
-        self.ds = self.build_iter()
-
-
-        self.size=len(self.generator)//self.batch_size
-    def parse_file(self, im_root_path, ann_file):
-
-        raise NotImplementedError("you need implemented the parse func for your data")
-
-    def build_iter(self,):
-
-
-        ds = DataFromGenerator(self.generator)
-        ds = RepeatedData(ds, -1)
-        if cfg.DATA.mutiscale and self.training_flag:
-            ds = MutiScaleBatcher(ds, self.num_gpu * self.batch_size,
-                                  scale_range=cfg.DATA.scales,
-                                  input_size=(cfg.DATA.hin, cfg.DATA.win),
-                                  is_training=self.training_flag)
-        else:
-            ds = MutiScaleBatcher(ds, self.num_gpu * self.batch_size,
-                                  input_size=(cfg.DATA.hin, cfg.DATA.win),
-                                  is_training=self.training_flag)
-        if not self.training_flag:
-            self.process_num=1
-        ds = PrefetchDataZMQ(ds, self.process_num, hwm=self.prefetch_size)
-        ds.reset_state()
-        ds = ds.get_data()
-        return ds
-
-
-    def __next__(self):
-        return next(self.ds)
 

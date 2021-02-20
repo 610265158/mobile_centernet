@@ -9,7 +9,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"          ##if u use muti gpu set them v
 config.TRAIN = edict()
 
 #### below are params for dataiter
-config.TRAIN.process_num = 5                      ### process_num for data provider
+config.TRAIN.process_num = 0                      ### process_num for data provider
 config.TRAIN.prefetch_size = 4                  ### prefect Q size for data provider
 config.TRAIN.test_interval=1
 config.TRAIN.num_gpu = 1                         ##match with   os.environ["CUDA_VISIBLE_DEVICES"]
