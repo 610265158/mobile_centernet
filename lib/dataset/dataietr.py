@@ -8,8 +8,7 @@ import numpy as np
 import traceback
 
 from lib.helper.logger import logger
-from tensorpack.dataflow import DataFromGenerator
-from tensorpack.dataflow import BatchData, PrefetchDataZMQ,RepeatedData
+
 
 
 from lib.dataset.centernet_data_sampler import get_affine_transform,affine_transform
