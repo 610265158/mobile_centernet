@@ -156,8 +156,7 @@ class Train(object):
                 cv2.imshow('img', img)
                 cv2.waitKey(0)
         else:
-            data = torch.from_numpy(image).to(self.device).float()
-
+            data = image.to(self.device).float()
 
             if cfg.DATA.use_int8_data:
                 hm_target = hm_target.to(self.device).float()/cfg.DATA.use_int8_enlarge
@@ -224,7 +223,7 @@ class Train(object):
         self.model.eval()
         t = time.time()
         with torch.no_grad():
-            for step,(image,hm_target, wh_target,weights) in enumerate(self.train_ds):
+            for step,(image,hm_target, wh_target,weights) in enumerate(self.val_ds):
 
 
                 data = image.to(self.device).float()
