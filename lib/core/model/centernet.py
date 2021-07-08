@@ -21,7 +21,7 @@ class Net(nn.Module):
         super().__init__()
 
 
-        self.model = timm.create_model('mobilenetv3_large_100', pretrained=False, features_only=True,exportable=True)
+        self.model = timm.create_model('mobilenetv3_large_100', pretrained=True, features_only=True,exportable=True)
 
 
 
@@ -182,8 +182,7 @@ class CenterNet(nn.Module):
         fms = self.backbone(inputs)
 
 
-        for x in fms:
-            print(x.size())
+
         if self.extra_conv is not None:
 
             extra_fm=self.extra_conv(fms[-1])
