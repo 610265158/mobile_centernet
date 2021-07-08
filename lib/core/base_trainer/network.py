@@ -42,8 +42,7 @@ class Train(object):
                          num_workers=cfg.TRAIN.process_num,
                          shuffle=False)
 
-
-
+    self.gradient_clip = cfg.TRAIN.gradient_clip
     self.init_lr=cfg.TRAIN.init_lr
     self.warup_step=cfg.TRAIN.warmup_step
     self.epochs = cfg.TRAIN.epoch
@@ -87,7 +86,6 @@ class Train(object):
     self.iter_num=0
 
 
-    # self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,mode='max', patience=3,verbose=True)
     self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR( self.optimizer, self.epochs,eta_min=1.e-6)
 
     self.criterion = CenterNetLoss().to(self.device)
@@ -182,6 +180,8 @@ class Train(object):
             else:
                 current_loss.backward()
 
+
+            nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.gradient_clip, norm_type=2)
             self.optimizer.step()
             if cfg.TRAIN.ema:
                 self.ema.update()

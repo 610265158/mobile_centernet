@@ -9,17 +9,16 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"          ##if u use muti gpu set them v
 config.TRAIN = edict()
 
 #### below are params for dataiter
-config.TRAIN.process_num = 5                      ### process_num for data provider
-config.TRAIN.prefetch_size = 4                  ### prefect Q size for data provider
+config.TRAIN.process_num = 4                      ### process_num for data provider
+
 config.TRAIN.test_interval=1
 config.TRAIN.num_gpu = 1                         ##match with   os.environ["CUDA_VISIBLE_DEVICES"]
-config.TRAIN.batch_size = 32                    ###A big batch size may achieve a better result, but the memory is a problem
+config.TRAIN.batch_size = 32*config.TRAIN.num_gpu                    ###A big batch size may achieve a better result, but the memory is a problem
 config.TRAIN.log_interval = 10
-config.TRAIN.epoch = 50                      ###just keep training , evaluation shoule be take care by yourself,
+config.TRAIN.epoch = 70                      ###just keep training , evaluation shoule be take care by yourself,
                                                ### generally 10,0000 iters is enough
 
-config.TRAIN.train_set_size=117266            ###widerface train size
-config.TRAIN.val_set_size=5000             ###widerface val size
+
 
 
 config.TRAIN.lr_decay='cos'
@@ -37,7 +36,7 @@ else:
 config.TRAIN.norm='BN'    ##'GN' OR 'BN'
 config.TRAIN.lock_basenet_bn=False
 config.TRAIN.frozen_stages=-1   ##no freeze
-config.TRAIN.gradient_clip=False
+config.TRAIN.gradient_clip=5
 config.TRAIN.SWA=-1
 
 config.TRAIN.ema=False
@@ -65,7 +64,7 @@ config.DATA.alpha=0.54
 config.DATA.beta=0.54
 ##mobilenetv3 as basemodel
 config.MODEL = edict()
-config.MODEL.net_structure='ShuffleNetV2'
+
 
 config.MODEL.model_path = './model/'  # save directory
 config.MODEL.pretrained_model=None
@@ -77,11 +76,12 @@ config.MODEL.max_box= 100
 
 ##model params
 config.MODEL.global_stride=4
-config.MODEL.backbone_feature_dims=[24,116,232,464]   ##c2,c3,c4,c5
+config.MODEL.backbone_feature_dims=[24,40,112,960]   ##c2,c3,c4,c5
 config.MODEL.head_dims=[128,192,256]                ## c2,c3,c4
 
 if config.MODEL.global_stride==8:
-    config.MODEL.backbone_feature_dims = [ 116,232,464,480]  ##c3,c4,c5,c6
+    config.MODEL.backbone_feature_dims = [ 32, 96, 320,480]  ##c3,c4,c5,c6
+
 
 config.MODEL.freeze_bn=False
 
