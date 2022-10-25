@@ -6,8 +6,6 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 from torch.nn import Parameter
-from lib.core.model.shufflenet import shufflenet_v2_x1_0
-from lib.core.model.resnet import resnet18
 
 from lib.core.model.fpn import Fpn
 
@@ -68,7 +66,6 @@ class CenterNetHead(nn.Module):
 class CenterNet(nn.Module):
     def __init__(self, inference=False,coreml=False ):
         super().__init__()
-
 
         self.down_ratio=cfg.MODEL.global_stride
 

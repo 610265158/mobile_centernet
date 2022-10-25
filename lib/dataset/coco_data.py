@@ -4,7 +4,7 @@ import numpy as np
 from pycocotools.coco import COCO
 import os
 
-from lib.helper.logger import logger
+from lib.core.utils.logger import logger
 
 
 ## read coco data

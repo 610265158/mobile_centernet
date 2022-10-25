@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import traceback
 
-from lib.helper.logger import logger
+from lib.core.utils.logger import logger
 
 
 
@@ -70,13 +70,13 @@ class data_info():
 
 class AlaskaDataIter():
 
-    def __init__(self, img_root_path='', ann_file=None, training_flag=True, shuffle=True):
+    def __init__(self, ann_file=None, training_flag=True, shuffle=True):
 
         self.color_augmentor = ColorDistort()
 
         self.training_flag = training_flag
 
-        self.lst = self.parse_file(img_root_path, ann_file)
+        self.lst = self.parse_file('', ann_file)
 
         self.shuffle = shuffle
 
@@ -136,9 +136,6 @@ class AlaskaDataIter():
             img=image
 
             if is_training:
-
-
-
 
 
                 ###random crop and flip

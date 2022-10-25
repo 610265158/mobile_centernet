@@ -1,4 +1,4 @@
-from lib.helper.logger import logger
+from lib.core.utils.logger import logger
 from lib.core.base_trainer.network import Train
 import setproctitle
 
