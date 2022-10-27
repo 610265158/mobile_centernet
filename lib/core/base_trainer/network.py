@@ -348,7 +348,7 @@ class Train(object):
                     self.scaler.update()
                     self.optimizer.zero_grad()
 
-                if cfg.MODEL.ema:
+                if cfg.TRAIN.ema:
                     self.ema.update()
                 self.iter_num+=1
                 time_cost_per_batch=time.time()-start
@@ -475,7 +475,7 @@ class Train(object):
                 self.optimizer.swap_swa_sgd()
 
             ##switch eam weighta
-            if cfg.MODEL.ema:
+            if cfg.TRAIN.ema:
                 self.ema.apply_shadow()
 
             if epoch%cfg.TRAIN.test_interval==0 and epoch>0 or epoch%10==0:
@@ -519,7 +519,7 @@ class Train(object):
             else:
                 self.scheduler.step()
             ####switch back
-            if cfg.MODEL.ema:
+            if cfg.TRAIN.ema:
                 self.ema.restore()
 
             # save_checkpoint({
