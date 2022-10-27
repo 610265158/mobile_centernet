@@ -508,7 +508,7 @@ class Train(object):
                 current_model_saved_name='%s/fold%d_epoch_%d_val_loss_%.6f.pth'%(cfg.MODEL.model_path,
                                                                                  self.fold,
                                                                                  epoch,
-                                                                                 summary_loss.avg)
+                                                                                 summary_student_loss.avg)
                 logger.info('A model saved to %s' % current_model_saved_name)
                 #### save the model every end of epoch
                 if  self.ddp and torch.distributed.get_rank() == 0 :
