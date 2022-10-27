@@ -316,10 +316,7 @@ class Train(object):
                 ## prepare data
                 data = image.to(self.device).float()
 
-                if cfg.DATA.use_int8_data:
-                    hm_target = hm_target.to(self.device).float()/cfg.DATA.use_int8_enlarge
-                else:
-                    hm_target = hm_target.to(self.device).float()
+                hm_target = hm_target.to(self.device).float()
                 wh_target = wh_target.to(self.device).float()
                 weights = weights.to(self.device).float()
 
@@ -328,7 +325,7 @@ class Train(object):
 
                 with torch.cuda.amp.autocast(enabled=self.fp16):
 
-                    student_loss, teacher_loss, distill_loss,mate = self.model(data,gt_matte,trimap)
+                    student_loss, teacher_loss, distill_loss,mate = self.model(data,hm_target, wh_target,weights)
 
                     # calculate the final loss, backward the loss, and update the model
                     current_loss =  student_loss+ teacher_loss+ distill_loss
@@ -390,10 +387,9 @@ class Train(object):
             return summary_loss
 
         def distributed_test_epoch(epoch_num):
-            summary_loss = AverageMeter()
-            summary_dice= AverageMeter()
-            summary_mad= AverageMeter()
-            summary_mse= AverageMeter()
+            summary_student_loss = AverageMeter()
+            summary_teacher_loss= AverageMeter()
+
 
 
             self.model.eval()
@@ -405,27 +401,25 @@ class Train(object):
                     data = image.to(self.device).float()
 
 
-                    if cfg.DATA.use_int8_data:
-                        hm_target = hm_target.to(self.device).float() / cfg.DATA.use_int8_enlarge
-                    else:
-                        hm_target = hm_target.to(self.device).float()
+                    hm_target = hm_target.to(self.device).float()
 
                     wh_target = wh_target.to(self.device).float()
                     weights = weights.to(self.device).float()
                     batch_size = data.shape[0]
 
                     with torch.no_grad():
-                        student_loss, teacher_loss, distill_loss,mate = self.model(data,gt_matte,trimap)
+                        student_loss, teacher_loss, distill_loss,mate = self.model(data,hm_target, wh_target,weights)
 
-                        # calculate the final loss, backward the loss, and update the model
-                        loss =  student_loss
+
 
 
 
                     if self.ddp:
-                            torch.distributed.all_reduce(loss.div_(torch.distributed.get_world_size()))
+                            torch.distributed.all_reduce(student_loss.div_(torch.distributed.get_world_size()))
+                            torch.distributed.all_reduce(teacher_loss.div_(torch.distributed.get_world_size()))
 
-                    summary_loss.update(loss.detach().item(), batch_size)
+                    summary_student_loss.update(student_loss.detach().item(), batch_size)
+                    summary_teacher_loss.update(teacher_loss.detach().item(), batch_size)
 
 
 
@@ -437,18 +431,19 @@ class Train(object):
 
                     log_message = '[fold %d], ' \
                                   'Val Step %d, ' \
-                                  'summary_loss: %.6f, ' \
+                                  'summary_student_loss: %.6f, ' \
+                                  'summary_teacher_loss: %.6f, ' \
                                   'time: %.6f' % (
                                       self.fold,step,
-                                      summary_loss.avg,
-
+                                      summary_student_loss.avg,
+                                      summary_teacher_loss.avg,
                                       time.time() - t)
 
                     logger.info(log_message)
 
 
 
-            return summary_loss
+            return summary_student_loss,summary_teacher_loss
 
 
 
@@ -485,15 +480,17 @@ class Train(object):
 
             if epoch%cfg.TRAIN.test_interval==0 and epoch>0 or epoch%10==0:
 
-                summary_loss,summary_dice ,summary_mad,summary_mse= distributed_test_epoch(epoch)
+                summary_student_loss,summary_teacher_loss= distributed_test_epoch(epoch)
 
                 val_epoch_log_message = '[fold %d], ' \
                                         '[RESULT]: VAL. Epoch: %d,' \
-                                        ' summary_loss: %.5f,' \
+                                        ' summary_student_loss: %.5f,' \
+                                        ' summary_teacher_loss: %.5f,' \
                                         ' time:%.5f' % (
                                             self.fold,
                                             epoch,
-                                            summary_loss.avg,
+                                            summary_student_loss.avg,
+                                            summary_teacher_loss.avg,
                                             (time.time() - t))
 
                 logger.info(val_epoch_log_message)
@@ -508,10 +505,10 @@ class Train(object):
 
                 #### save the model every end of epoch
                 #### save the model every end of epoch
-                current_model_saved_name='./models/fold%d_epoch_%d_val_loss_%.6f_val_dice_%.6f.pth'%(self.fold,
-                                                                                                     epoch,
-                                                                                                     summary_loss.avg,
-                                                                                                     summary_dice.avg,)
+                current_model_saved_name='%s/fold%d_epoch_%d_val_loss_%.6f.pth'%(cfg.MODEL.model_path,
+                                                                                 self.fold,
+                                                                                 epoch,
+                                                                                 summary_loss.avg)
                 logger.info('A model saved to %s' % current_model_saved_name)
                 #### save the model every end of epoch
                 if  self.ddp and torch.distributed.get_rank() == 0 :

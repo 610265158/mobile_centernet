@@ -248,6 +248,8 @@ class AlaskaDataIter():
 
         heatmap, wh_map, weight = self.target_producer.ttfnet_centernet_datasampler(image, boxes_, klass_)
         image=np.transpose(image,axes=[2,0,1])
+
+
         return image, heatmap, wh_map, weight
 
     def _get_border(self, border, size):

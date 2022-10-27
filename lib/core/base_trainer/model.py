@@ -13,7 +13,7 @@ from segmentation_models_pytorch.base.initialization import initialize_decoder, 
 import segmentation_models_pytorch
 
 from scipy import ndimage
-
+from lib.core.model.utils import normal_init
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -168,7 +168,7 @@ class DecoderBlock(nn.Module):
                 out_channels,
                 kernel_size=kernel_size,
                 padding=kernel_size // 2,
-            ),
+                ),
                 nn.BatchNorm2d(out_channels, momentum=bn_momentum),
                 nn.LeakyReLU(0.1))
         else:
@@ -177,7 +177,7 @@ class DecoderBlock(nn.Module):
                 out_channels,
                 kernel_size=kernel_size,
                 padding=kernel_size // 2,
-            ),
+                ),
                 nn.BatchNorm2d(out_channels, momentum=bn_momentum),
                 nn.LeakyReLU(0.1))
 
@@ -330,11 +330,15 @@ class Net(nn.Module):
         )
 
         self.cls = nn.Conv2d(128, 80, kernel_size=3, stride=1, padding=1, bias=True)
-        self.hw = nn.Conv2d(128, 4, kernel_size=3, stride=1, padding=1, bias=True)
+        self.wh = nn.Conv2d(128, 4, kernel_size=3, stride=1, padding=1, bias=True)
+
+        normal_init(self.cls, 0, 0.01,-2.19)
+        normal_init(self.wh, 0, 0.01, 0)
+
 
         initialize_decoder(self.decoder)
 
-        self.act = nn.Sigmoid()
+
 
     def forward(self, x):
         """Sequentially pass `x` trough model`s encoder, decoder and heads"""
@@ -343,8 +347,8 @@ class Net(nn.Module):
 
         features = [x] + features
 
-        for tt in features:
-            print(tt.size())
+        # for tt in features:
+        #     print(tt.size())
 
         features[-1] = self.aspp(features[-1])
         # features.pop(-2)
@@ -356,9 +360,9 @@ class Net(nn.Module):
         # decoder_output=[features[-1]]+decoder_output
 
         pre_cls = self.cls(decoder_output[-1])
-        pre_hw = self.hw(decoder_output[-1])
+        pre_wh = self.wh(decoder_output[-1])
 
-        return pre_cls, pre_hw, decoder_output
+        return pre_cls, pre_wh*16, decoder_output
 
 
 class TeacherNet(nn.Module):
@@ -394,11 +398,13 @@ class TeacherNet(nn.Module):
         )
 
         self.cls = nn.Conv2d(128, 80, kernel_size=3, stride=1, padding=1, bias=True)
-        self.hw = nn.Conv2d(128, 4, kernel_size=3, stride=1, padding=1, bias=True)
+        self.wh = nn.Conv2d(128, 4, kernel_size=3, stride=1, padding=1, bias=True)
 
         initialize_decoder(self.decoder)
 
-        self.act = nn.Sigmoid()
+        normal_init(self.cls, 0, 0.01,-2.19)
+        normal_init(self.wh, 0, 0.01, 0)
+
 
     def forward(self, x):
         """Sequentially pass `x` trough model`s encoder, decoder and heads"""
@@ -418,17 +424,10 @@ class TeacherNet(nn.Module):
         # decoder_output=[features[-1]]+decoder_output
 
         pre_cls = self.cls(decoder_output[-1])
-        pre_hw = self.hw(decoder_output[-1])
+        pre_wh = self.wh(decoder_output[-1])
 
-        # print(pre_semantic.size())
-        # print(pre_mate.size())
-        # pre_mate=self.act(pre_mate)
-        # #
-        # # pre_mate=self.blur(pre_mate)
-        # #
-        # return pre_mate
-        # pr    int(pre_semantic.size())
-        return pre_cls, pre_hw, decoder_output
+
+        return pre_cls, pre_wh*16, decoder_output
 
 
 class COTRAIN(nn.Module):
@@ -436,7 +435,11 @@ class COTRAIN(nn.Module):
         super(COTRAIN, self).__init__()
 
         self.inference = inference
-        self.student = Net()
+        # from lib.core.model.centernet import CenterNet
+        # self.student = CenterNet()
+
+        self.student=Net()
+
         self.teacher = TeacherNet()
 
         self.MSELoss = nn.MSELoss()
@@ -456,7 +459,7 @@ class COTRAIN(nn.Module):
 
     def loss(self, pre_cls, pred_hw, hm_target, wh_target, weights):
 
-        cls_loss, wh_loss = self.criterion([cls, wh], [hm_target, wh_target, weights])
+        cls_loss, wh_loss = self.criterion([pre_cls, pred_hw], [hm_target, wh_target, weights])
 
         current_loss = cls_loss + wh_loss
 
@@ -464,29 +467,31 @@ class COTRAIN(nn.Module):
 
     def forward(self, x, hm_target=None, wh_target=None, weights=None):
 
-        student_pre_cls, student_pre_hw, student_decoder_output = self.student(x)
+        student_pre_cls, student_pre_wh ,student_decoder_output= self.student(x)
 
         # teacher_pre_cls, teacher_pre_hw, teacher_decoder_output=self.teacher(x)
 
         if self.inference:
             ##do decode
-            detections = self.decode(student_pre_cls,student_pre_hw , 4)
+            detections = self.decode(student_pre_cls,student_pre_wh , 4)
             return detections
 
-            return alpha
+            # return alpha
 
         teacher_pre_cls, teacher_pre_hw, teacher_decoder_output = self.teacher(x)
-
+        #
         distill_loss = self.distill_loss(student_decoder_output, teacher_decoder_output)
 
-        student_loss = self.loss(x, student_pre_semantic, student_pre_details, student_pre_mate, gt_matte, trimap)
+        student_loss = self.loss( student_pre_cls, student_pre_wh, hm_target, wh_target, weights)
 
-        teacher_loss = self.loss(x, teacher_pre_semantic, teacher_pre_details, teacher_pre_mate, gt_matte, trimap)
+        teacher_loss = self.loss( teacher_pre_cls, teacher_pre_hw, hm_target, wh_target, weights)
 
-        return student_loss, teacher_loss, distill_loss * 10, student_pre_mate
-    def decode(self, heatmap, wh, stride, K=100):
+        return student_loss, teacher_loss, distill_loss,None
+    def decode(self, heatmap, wh, stride, K=10):
         def nms(heat, kernel=3):
             ##fast
+
+
 
             heat = heat.permute([0, 2, 3, 1])
             heat, clses = torch.max(heat, dim=3)
@@ -509,7 +514,7 @@ class COTRAIN(nn.Module):
 
             y_range, x_range = torch.meshgrid(shifts_y, shifts_x)
 
-            base_loc = torch.stack((x_range, y_range, x_range, y_range), axis=0)  # (h, w，4)
+            base_loc = torch.stack((x_range, y_range, x_range, y_range), axis=0)  # (h, w茂录艗4)
 
             base_loc = torch.unsqueeze(base_loc, dim=0)
 

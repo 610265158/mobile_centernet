@@ -254,12 +254,9 @@ class CenternetDatasampler:
         reg_weight = np.transpose(reg_weight, axes=[1, 2, 0])
 
 
-        if cfg.DATA.use_int8_data:
 
-            heatmap = (heatmap * cfg.DATA.use_int8_enlarge).astype(np.uint8)
-            return heatmap, box_target, reg_weight
-        else:
-            return heatmap, box_target, reg_weight
+
+        return heatmap, box_target, reg_weight
 
 
 
