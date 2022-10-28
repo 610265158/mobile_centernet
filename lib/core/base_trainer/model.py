@@ -435,8 +435,12 @@ class COTRAIN(nn.Module):
         super(COTRAIN, self).__init__()
 
         self.inference = inference
+
         # from lib.core.model.centernet import CenterNet
         # self.student = CenterNet()
+        #
+        # state_dict = torch.load('centernet_mobilenetv2_stride4.pth', map_location='cpu')
+        # self.student.load_state_dict(state_dict, strict=False)
 
         self.student=Net()
 
@@ -478,16 +482,16 @@ class COTRAIN(nn.Module):
 
             # return alpha
 
-        teacher_pre_cls, teacher_pre_hw, teacher_decoder_output = self.teacher(x)
-        #
-        distill_loss = self.distill_loss(student_decoder_output, teacher_decoder_output)
+        # teacher_pre_cls, teacher_pre_hw, teacher_decoder_output = self.teacher(x)
+        # #
+        # distill_loss = self.distill_loss(student_decoder_output, teacher_decoder_output)
 
         student_loss = self.loss( student_pre_cls, student_pre_wh, hm_target, wh_target, weights)
 
-        teacher_loss = self.loss( teacher_pre_cls, teacher_pre_hw, hm_target, wh_target, weights)
+        # teacher_loss = self.loss( teacher_pre_cls, teacher_pre_hw, hm_target, wh_target, weights)
 
-        return student_loss, teacher_loss, distill_loss,None
-    def decode(self, heatmap, wh, stride, K=10):
+        return student_loss, student_loss, student_loss,None
+    def decode(self, heatmap, wh, stride, K=100):
         def nms(heat, kernel=3):
             ##fast
 
@@ -513,12 +517,13 @@ class COTRAIN(nn.Module):
                                     dtype=torch.int32)
 
             y_range, x_range = torch.meshgrid(shifts_y, shifts_x)
-
             base_loc = torch.stack((x_range, y_range, x_range, y_range), axis=0)  # (h, w茂录艗4)
 
-            base_loc = torch.unsqueeze(base_loc, dim=0)
+            base_loc = torch.unsqueeze(base_loc, dim=0).to(torch.device("cuda" if torch.cuda.is_available() else 'cpu'))
 
-            wh = wh * torch.tensor([1, 1, -1, -1],requires_grad=False).reshape([1, 4, 1, 1])
+
+            wh = wh * torch.tensor([1, 1, -1, -1],requires_grad=False,
+                                   device=torch.device("cuda" if torch.cuda.is_available() else 'cpu')).reshape([1, 4, 1, 1])
             pred_boxes = base_loc - wh
 
             return pred_boxes

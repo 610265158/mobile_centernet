@@ -1,4 +1,4 @@
-from lib.core.model.centernet import CenterNet
+from lib.core.base_trainer.model import COTRAIN
 
 import numpy as np
 import math
@@ -11,7 +11,7 @@ class Detector:
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
 
-        self.model=CenterNet(inference=True)
+        self.model=COTRAIN(inference=True)
         print(model_path)
         state_dict = torch.load(model_path, map_location=self.device)
         self.model.load_state_dict(state_dict, strict=False)
@@ -46,7 +46,7 @@ class Detector:
             image= np.expand_dims(image, -1)
 
         image_fornet = np.expand_dims(image, 0)
-        image_fornet = np.transpose(image_fornet,axes=[0,3,1,2])
+        image_fornet = np.transpose(image_fornet,axes=[0,3,1,2])/255.
 
         image_fornet=torch.from_numpy(image_fornet).float().to(self.device)
 
