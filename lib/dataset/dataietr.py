@@ -80,23 +80,67 @@ class AlaskaDataIter():
 
         self.shuffle = shuffle
 
-        self.train_trans = A.Compose([
-                                      A.RandomBrightnessContrast(p=0.75, brightness_limit=0.1, contrast_limit=0.2),
+        self.train_trans =  self.train_trans=A.Compose([
 
-                                      A.CLAHE(clip_limit=4.0, p=0.7),
-                                      A.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=20,
-                                                           val_shift_limit=10, p=0.5),
+            A.RandomResizedCrop(height=cfg.DATA.hin ,
+                                width=cfg.DATA.win ,
+                                scale=(0.8, 1.0),
+                                interpolation=cv2.INTER_LINEAR),
+            A.HorizontalFlip(p=0.5),
+            A.ShiftScaleRotate(shift_limit=0.1,
+                               scale_limit=0.5,
+                               rotate_limit=45,
+                               p=0.5,
+                               border_mode=cv2.BORDER_CONSTANT,
+                               mask_value=0),
+            A.HueSaturationValue(p=0.3),
+            A.RandomBrightnessContrast(p=0.3),
 
-                                      A.OneOf([
-                                          A.MotionBlur(blur_limit=5),
-                                          A.MedianBlur(blur_limit=5),
-                                          A.GaussianBlur(blur_limit=5),
-                                          A.GaussNoise(var_limit=(5.0, 30.0)),
-                                      ], p=0.7)
-                                      ])
+            A.OneOf([A.GaussNoise(),
+                     A.ISONoise()],
+                    p=0.2),
+
+            # A.OneOf([A.GaussianBlur(),
+            #         A.MotionBlur()],
+            #        p=0.2),
+
+
+
+            # A.ToGray(p=0.2),
+            # A.JpegCompression(quality_lower=60,
+            #                  quality_upper=99,
+            #                  p=0.2),
+
+
+        ],bbox_params=A.BboxParams(format='pascal_voc',label_fields=['class_labels'])
+        )
+
+        self.target_trans = A.Compose([
+
+
+            # A.HorizontalFlip(p=0.5),
+
+            A.OneOf([
+                A.ElasticTransform(mask_value=0,
+                                   value=0,
+                                   border_mode=cv2.BORDER_CONSTANT),
+                A.GridDistortion(mask_value=0,
+                                 value=0,
+                                 border_mode=cv2.BORDER_CONSTANT),
+                A.OpticalDistortion(mask_value=0,
+                                    value=0,
+                                    border_mode=cv2.BORDER_CONSTANT)],
+
+                p=0.5),
+
+
+        ]
+        )
 
         self.target_producer = CenternetDatasampler()
+        self.logos = []
 
+        self.get_logs()
 
     def __getitem__(self, item):
 
@@ -116,128 +160,64 @@ class AlaskaDataIter():
 
         return all_samples
 
+
+    def get_logs(self):
+        for item in ["logos/1.jpg","logos/2.jpg"]:
+            log_img=cv2.imread(item)
+
+            self.logos.append(log_img)
+
     def _map_func(self,dp,is_training):
         """Data augmentation function."""
         ####customed here
         try:
             fname, annos = dp
             image = cv2.imread(fname, cv2.IMREAD_COLOR)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            labels = annos.split(' ')
-            boxes = []
 
 
-            for label in labels:
-                bbox = np.array(label.split(','), dtype=np.float)
-                boxes.append([bbox[0], bbox[1], bbox[2], bbox[3], bbox[4]])
+            if 1:
 
-            boxes = np.array(boxes, dtype=np.float)
+                ### do sync first
+                boxes_ = []
+                klass_ = []
 
-            img=image
+                image_limit_h,image_limit_w,_=image.shape
 
-            if is_training:
+                for i in range(1):
+                    logo_image = self.logos[random.randint(0, 1)]
 
+                    logo_size_h = random.randint(32, image_limit_h)
+                    logo_size_w = int(random.uniform(0.5, 1.5) * logo_size_h)
 
-                ###random crop and flip
-                height, width = img.shape[0], img.shape[1]
-                c = np.array([img.shape[1] / 2., img.shape[0] / 2.], dtype=np.float32)
-                if 0:
-                    input_h = (height | self.opt.pad) + 1
-                    input_w = (width | self.opt.pad) + 1
-                    s = np.array([input_w, input_h], dtype=np.float32)
-                else:
-                    s = max(img.shape[0], img.shape[1]) * 1.0
-                    input_h, input_w = cfg.DATA.hin, cfg.DATA.win
+                    logo_size_w = np.clip(logo_size_w, 32, image_limit_w)
 
-                flipped = False
-                if 1:
-                    if 1:
-                        s = s * np.random.choice(np.arange(0.6, 1.4, 0.1))
-                        w_border = self._get_border(128, img.shape[1])
-                        h_border = self._get_border(128, img.shape[0])
-                        c[0] = np.random.randint(low=w_border, high=img.shape[1] - w_border)
-                        c[1] = np.random.randint(low=h_border, high=img.shape[0] - h_border)
+                    logo_image = cv2.resize(logo_image, dsize=[logo_size_w, logo_size_h])
 
-                    if np.random.random() < 0.5:
-                        flipped = True
-                        img = img[:, ::-1, :]
-                        c[0] = width - c[0] - 1
+                    h_logo, w_logo, _ = logo_image.shape
 
-                trans_output = get_affine_transform(c, s, 0, [input_w, input_h])
+                    start_y = random.randint(0, image_limit_h - h_logo)
+                    start_x = random.randint(0, image_limit_w - w_logo)
 
-                inp = cv2.warpAffine(img, trans_output,
-                                     (input_w, input_h),
-                                     flags=cv2.INTER_LINEAR)
+                    image[start_y:start_y + h_logo, start_x:start_x + w_logo] = logo_image
 
-                boxes_ = boxes[:, :4]
-                klass_ = boxes[:, 4:5]
-
-                boxes_refine = []
-                for k in range(boxes_.shape[0]):
-                    bbox = boxes_[k]
-
-                    cls_id = klass_[k]
-                    if flipped:
-                        bbox[[0, 2]] = width - bbox[[2, 0]] - 1
-                    bbox[:2] = affine_transform(bbox[:2], trans_output)
-                    bbox[2:] = affine_transform(bbox[2:], trans_output)
-                    bbox[[0, 2]] = np.clip(bbox[[0, 2]], 0, input_w - 1)
-                    bbox[[1, 3]] = np.clip(bbox[[1, 3]], 0, input_h - 1)
-
-                    boxes_refine.append(bbox)
-
-                boxes_refine = np.array(boxes_refine)
-                image = inp.astype(np.uint8)
-
-                # angle=random.choice([0,90,180,270])
-                # image,boxes_refine=Rotate_with_box(image,angle,boxes_refine)
-
-                boxes = np.concatenate([boxes_refine, klass_], axis=1)
-
-                ####random crop and flip
-                #### pixel level aug
-
-                image=self.train_trans(image=image)['image']
+                    end_x = np.clip(start_x + w_logo,start_x,image_limit_w)
+                    end_y = np.clip(start_y + h_logo, start_y, image_limit_h)
 
 
 
+                    boxes_.append([start_x, start_y,end_x, end_y])
+                    klass_.append(0)
 
-                boxes_cleaned=[]
-                for kk in range(boxes.shape[0]):
-                    box=boxes[kk]
 
-                    if not ((box[3] - box[1]) < cfg.DATA.cover_obj or (box[2] - box[0]) < cfg.DATA.cover_obj):
-                        boxes_cleaned.append(box)
-                boxes=np.array(boxes_cleaned)
-                ####
 
-            else:
-                boxes_ = boxes[:, 0:4]
-                klass_ = boxes[:, 4:]
-                image, shift_x, shift_y = Fill_img(image, target_width=cfg.DATA.win, target_height=cfg.DATA.hin)
-                boxes_[:, 0:4] = boxes_[:, 0:4] + np.array([shift_x, shift_y, shift_x, shift_y], dtype='float32')
-                h, w, _ = image.shape
-                boxes_[:, 0] /= w
-                boxes_[:, 1] /= h
-                boxes_[:, 2] /= w
-                boxes_[:, 3] /= h
-                image = image.astype(np.uint8)
-                image = cv2.resize(image, (cfg.DATA.win, cfg.DATA.hin))
+                transformed = self.train_trans(image=image,bboxes=boxes_,class_labels=klass_)
+                image = transformed['image']
+                boxes_ = transformed['bboxes']
+                klass_ = transformed['class_labels']
+                #### augmentation the target
 
-                boxes_[:, 0] *= cfg.DATA.win
-                boxes_[:, 1] *= cfg.DATA.hin
-                boxes_[:, 2] *= cfg.DATA.win
-                boxes_[:, 3] *= cfg.DATA.hin
-                image = image.astype(np.uint8)
-                boxes = np.concatenate([boxes_, klass_], axis=1)
-
-            if boxes.shape[0] == 0 or np.sum(image) == 0:
-                boxes_ = np.array([[0, 0, -1, -1]])
-                klass_ = np.array([0])
-            else:
-                boxes_ = np.array(boxes[:, 0:4], dtype=np.float32)
-                klass_ = np.array(boxes[:, 4], dtype=np.int64)
-
+            boxes_ = np.array(boxes_)
+            klass_ = np.array(klass_)
 
         except:
             logger.warn('there is an err with %s' % fname)
@@ -248,7 +228,7 @@ class AlaskaDataIter():
 
         heatmap, wh_map, weight = self.target_producer.ttfnet_centernet_datasampler(image, boxes_, klass_)
         image=np.transpose(image,axes=[2,0,1])
-
+        print(heatmap.shape)
         image=image/255.
         return image, heatmap, wh_map, weight
 

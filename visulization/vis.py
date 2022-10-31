@@ -70,12 +70,9 @@ def cocodetect(data_dir):
     for pic in pics:
         print(pic)
 
-        img=cv2.imread(pic)
-
+        img = cv2.imread(pic, cv2.IMREAD_COLOR)
+        # img = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
         img_show = img.copy()
-
-
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         boxes=detector(img,thres,input_shape=(cfg.DATA.hin,cfg.DATA.win))
 

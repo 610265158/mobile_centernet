@@ -16,6 +16,7 @@ class Detector:
         state_dict = torch.load(model_path, map_location=self.device)
         self.model.load_state_dict(state_dict, strict=False)
         self.model.eval()
+        self.model.reparameterize()
         self.model.to(self.device)
     def __call__(self, image, score_threshold=0.5,input_shape=(cfg.DATA.hin,cfg.DATA.win),max_boxes=1000):
         """Detect faces.
@@ -39,6 +40,7 @@ class Detector:
         image, scale_x, scale_y, dx, dy = self.preprocess(image,
                                                                  target_height=input_shape[0],
                                                                  target_width=input_shape[1])
+
 
 
         if cfg.DATA.channel==1:

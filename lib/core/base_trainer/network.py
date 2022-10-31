@@ -568,9 +568,9 @@ class Train(object):
 
             for i in range(images.shape[0]):
 
-                example_image=np.array(images[i],dtype=np.uint8)
+                example_image=np.array(images[i]*255,dtype=np.uint8)
                 example_image=np.transpose(example_image,[1,2,0])
-                example_hm=np.array(hm_target[i,:,:,0])
+                example_hm=np.array(hm_target[i,:,:,0]*255)
                 example_hm=example_hm.astype(np.uint8)
                 # example_hm=np.transpose(example_hm,[1,2,0])
 

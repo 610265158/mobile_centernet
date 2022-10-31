@@ -8,38 +8,37 @@ import numpy as np
 from segmentation_models_pytorch.encoders import get_encoder
 from segmentation_models_pytorch.base import modules as md
 
-from segmentation_models_pytorch.base.initialization import initialize_decoder, initialize_head
+from segmentation_models_pytorch.base.initialization import initialize_decoder,initialize_head
 
 import segmentation_models_pytorch
 
 from scipy import ndimage
-from lib.core.model.utils import normal_init
+
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 import timm
-from torchvision.models.mobilenetv3 import InvertedResidual, InvertedResidualConfig
-
 from lib.core.loss.centernet_loss import CenterNetLoss
+from lib.core.base_trainer.mobileone import MobileOneBlock
+from lib.core.model.utils import normal_init
 
-bn_momentum = 0.1
-
-
+bn_momentum=0.1
 class SeparableConv2d(nn.Module):
     """ Separable Conv
     """
-
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, dilation=1, padding=0, bias=False,
                  channel_multiplier=1., pw_kernel_size=1):
         super(SeparableConv2d, self).__init__()
 
+
         self.conv_dw = nn.Conv2d(
-            int(in_channels * channel_multiplier), int(in_channels * channel_multiplier), kernel_size,
-            stride=stride, dilation=dilation, padding=padding, groups=int(in_channels * channel_multiplier))
+            int(in_channels*channel_multiplier), int(in_channels*channel_multiplier), kernel_size,
+            stride=stride, dilation=dilation, padding=padding, groups=int(in_channels*channel_multiplier))
 
         self.conv_pw = nn.Conv2d(
-            int(in_channels * channel_multiplier), out_channels, pw_kernel_size, padding=0, bias=bias)
+            int(in_channels*channel_multiplier), out_channels, pw_kernel_size, padding=0, bias=bias)
 
     @property
     def in_channels(self):
@@ -50,20 +49,127 @@ class SeparableConv2d(nn.Module):
         return self.conv_pw.out_channels
 
     def forward(self, x):
+
         x = self.conv_dw(x)
         x = self.conv_pw(x)
         return x
 
 
+class RepConv2d(nn.Module):
+    """ Separable Conv
+    """
+    def __init__(self, in_channels,
+                 out_channels,
+                 kernel_size=3,
+                 stride=1,
+                 dilation=1,
+                 padding=0,
+                 bias=False,
+                 channel_multiplier=1.,
+                 pw_kernel_size=1,
+                 inference_mode=False,
+                 num_conv_branches=4,
+                 use_se=False):
+        super(RepConv2d, self).__init__()
+
+
+        self.conv_dw = MobileOneBlock(in_channels=in_channels,
+                                         out_channels=in_channels,
+                                         kernel_size=kernel_size,
+                                         stride=stride,
+                                         padding=kernel_size//2,
+                                         groups=in_channels,
+                                         inference_mode=inference_mode,
+                                         use_se=False,
+                                         num_conv_branches=num_conv_branches)
+        self.conv_pw = MobileOneBlock(in_channels=in_channels,
+                                         out_channels=out_channels,
+                                         kernel_size=1,
+                                         stride=1,
+                                         padding=0,
+                                         groups=1,
+                                         inference_mode=inference_mode,
+                                         use_se=False,
+                                         num_conv_branches=num_conv_branches)
+
+    @property
+    def in_channels(self):
+        return self.conv_dw.in_channels
+
+    @property
+    def out_channels(self):
+        return self.conv_pw.out_channels
+
+    def forward(self, x):
+
+        x = self.conv_dw(x)
+        x = self.conv_pw(x)
+        return x
+
+class GaussianBlurLayer(nn.Module):
+    """ Add Gaussian Blur to a 4D tensors
+    This layer takes a 4D tensor of {N, C, H, W} as input.
+    The Gaussian blur will be performed in given channel number (C) splitly.
+    """
+
+    def __init__(self, channels, kernel_size):
+        """
+        Arguments:
+            channels (int): Channel for input tensor
+            kernel_size (int): Size of the kernel used in blurring
+        """
+
+        super(GaussianBlurLayer, self).__init__()
+        self.channels = channels
+        self.kernel_size = kernel_size
+        assert self.kernel_size % 2 != 0
+
+        self.op = nn.Sequential(
+
+            nn.Conv2d(channels, channels, self.kernel_size,
+                      stride=1, padding=kernel_size//2, bias=None, groups=channels)
+        )
+
+        self._init_kernel()
+
+    def forward(self, x):
+        """
+        Arguments:
+            x (torch.Tensor): input 4D tensor
+        Returns:
+            torch.Tensor: Blurred version of the input
+        """
+
+        if not len(list(x.shape)) == 4:
+            print('\'GaussianBlurLayer\' requires a 4D tensor as input\n')
+            exit()
+        elif not x.shape[1] == self.channels:
+            print('In \'GaussianBlurLayer\', the required channel ({0}) is'
+                  'not the same as input ({1})\n'.format(self.channels, x.shape[1]))
+            exit()
+
+        return self.op(x)
+
+    def _init_kernel(self):
+        sigma = 0.3 * ((self.kernel_size - 1) * 0.5 - 1) + 0.8
+
+        n = np.zeros((self.kernel_size, self.kernel_size))
+        i = math.floor(self.kernel_size / 2)
+        n[i, i] = 1
+        kernel = ndimage.gaussian_filter(n, sigma)
+
+        for name, param in self.named_parameters():
+            param.data.copy_(torch.from_numpy(kernel))
+
+
 class ASPPPooling(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(ASPPPooling, self).__init__()
-        self.pool = nn.Sequential(
+        self.pool=nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Conv2d(in_channels, out_channels, 1, bias=False),
-            nn.BatchNorm2d(out_channels, momentum=bn_momentum),
-            nn.LeakyReLU(0.1))
-
+            nn.BatchNorm2d(out_channels,momentum=bn_momentum),
+            nn.ReLU())
     def forward(self, x):
         size = x.shape[-2:]
         x = self.pool(x)
@@ -78,60 +184,77 @@ class ASPP(nn.Module):
 
         rate1, rate2, rate3 = tuple(atrous_rates)
 
-        self.fm_conx1 = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels // 4, 1, bias=False),
-            nn.BatchNorm2d(out_channels // 4, momentum=bn_momentum),
-            nn.LeakyReLU(0.1))
+        self.fm_conx1=nn.Sequential(
+            nn.Conv2d(in_channels, out_channels//4, 1, bias=False),
+            nn.BatchNorm2d(out_channels//4,momentum=bn_momentum),
+            nn.ReLU())
 
-        self.fm_convx3_rate2 = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels // 4, kernel_size=3, padding=2, bias=False, dilation=rate1),
-            nn.BatchNorm2d(out_channels // 4, momentum=bn_momentum),
-            nn.LeakyReLU(0.1))
+        self.fm_convx3_rate2=nn.Sequential(
+            nn.Conv2d(in_channels, out_channels//4, kernel_size=3, padding=2, bias=False,dilation=rate1),
+            nn.BatchNorm2d(out_channels//4,momentum=bn_momentum),
+            nn.ReLU())
 
-        self.fm_convx3_rate4 = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels // 4, kernel_size=3, padding=4, bias=False, dilation=rate2),
-            nn.BatchNorm2d(out_channels // 4, momentum=bn_momentum),
-            nn.LeakyReLU(0.1))
+        self.fm_convx3_rate4=nn.Sequential(
+            nn.Conv2d(in_channels, out_channels//4, kernel_size=3, padding=4, bias=False,dilation=rate2),
+            nn.BatchNorm2d(out_channels//4,momentum=bn_momentum),
+            nn.ReLU())
 
-        self.fm_convx3_rate8 = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels // 4, kernel_size=3, padding=8, bias=False, dilation=rate3),
-            nn.BatchNorm2d(out_channels // 4, momentum=bn_momentum),
-            nn.LeakyReLU(0.1))
+        self.fm_convx3_rate8=nn.Sequential(
+            nn.Conv2d(in_channels, out_channels//4, kernel_size=3, padding=8, bias=False,dilation=rate3),
+            nn.BatchNorm2d(out_channels//4,momentum=bn_momentum),
+            nn.ReLU())
 
-        self.fm_pool = ASPPPooling(in_channels=in_channels, out_channels=out_channels // 4)
+        self.fm_pool=ASPPPooling(in_channels=in_channels,out_channels=out_channels//4)
 
         self.project = nn.Sequential(
-            nn.Conv2d(out_channels // 4 * 5, out_channels, 1, bias=False),
-            nn.BatchNorm2d(out_channels, momentum=bn_momentum),
-            nn.LeakyReLU(0.1))
+            nn.Conv2d(out_channels//4*5, out_channels, 1, bias=False),
+            nn.BatchNorm2d(out_channels,momentum=bn_momentum),
+            nn.ReLU())
 
     def forward(self, x):
-        fm1 = self.fm_conx1(x)
-        fm2 = self.fm_convx3_rate2(x)
-        fm4 = self.fm_convx3_rate4(x)
-        fm8 = self.fm_convx3_rate8(x)
-        fm_pool = self.fm_pool(x)
 
-        res = torch.cat([fm1, fm2, fm4, fm8, fm_pool], dim=1)
+        fm1=self.fm_conx1(x)
+        fm2=self.fm_convx3_rate2(x)
+        fm4=self.fm_convx3_rate4(x)
+        fm8=self.fm_convx3_rate8(x)
+        fm_pool=self.fm_pool(x)
+
+        res = torch.cat([fm1,fm2,fm4,fm8,fm_pool], dim=1)
 
         return self.project(res)
 
 
+
 class FeatureFuc(nn.Module):
-    def __init__(self, inchannels=128):
+    def __init__(self, inchannels=80,inference_mode=False):
         super(FeatureFuc, self).__init__()
 
-        self.block1 = InvertedResidual(cnf=InvertedResidualConfig(inchannels, 5, 256, inchannels, False, "RE", 1, 1, 1),
-                                       norm_layer=partial(nn.BatchNorm2d, momentum=bn_momentum))
-        self.block2 = InvertedResidual(cnf=InvertedResidualConfig(inchannels, 5, 256, inchannels, False, "RE", 1, 1, 1),
-                                       norm_layer=partial(nn.BatchNorm2d, momentum=bn_momentum))
 
+
+        self.block1 = RepConv2d(in_channels=inchannels,
+                                out_channels=256,
+                                kernel_size=5,
+                                inference_mode=inference_mode)
+        self.block2 = RepConv2d(in_channels=256,
+                                out_channels=256,
+                                kernel_size=5,
+                                inference_mode=inference_mode)
+        self.block3 = RepConv2d(in_channels=256,
+                                out_channels=inchannels,
+                                kernel_size=5,
+                                inference_mode=inference_mode)
+        initialize_decoder(self.block1)
+        initialize_decoder(self.block2)
+        initialize_decoder(self.block3)
     def forward(self, x):
-        y1 = self.block1(x)
 
-        y2 = self.block2(y1)
+        y1=self.block1(x)
 
-        return y2
+        y2=self.block2(y1)
+        y3 = self.block3(y2)
+
+        return y3
+
 
 
 class SCSEModule(nn.Module):
@@ -160,44 +283,37 @@ class DecoderBlock(nn.Module):
             use_attention=False,
             use_second_conv=False,
             kernel_size=5,
+            inference_mode=True
     ):
         super().__init__()
-        if use_separable_conv:
-            self.conv1 = nn.Sequential(SeparableConv2d(
-                in_channels + skip_channels,
-                out_channels,
-                kernel_size=kernel_size,
-                padding=kernel_size // 2,
-                ),
-                nn.BatchNorm2d(out_channels, momentum=bn_momentum),
-                nn.LeakyReLU(0.1))
-        else:
-            self.conv1 = nn.Sequential(nn.Conv2d(
-                in_channels + skip_channels,
-                out_channels,
-                kernel_size=kernel_size,
-                padding=kernel_size // 2,
-                ),
-                nn.BatchNorm2d(out_channels, momentum=bn_momentum),
-                nn.LeakyReLU(0.1))
 
-        # self.attention1 = md.Attention(attention_type, in_channels=in_channels + skip_channels)
+        self.conv1 = nn.Sequential(
+            RepConv2d(in_channels=in_channels+skip_channels,
+                      out_channels=out_channels,
+                      kernel_size=kernel_size,
+                      inference_mode=inference_mode,),
+        )
+
         if use_second_conv:
-            self.conv2 = nn.Sequential(nn.Conv2d(
-                out_channels,
-                out_channels,
-                kernel_size=3,
-                padding=1),
-                nn.BatchNorm2d(out_channels, momentum=bn_momentum),
-                nn.LeakyReLU(0.1))
+            self.conv2 = nn.Sequential(
+                RepConv2d(in_channels=out_channels,
+                          out_channels=out_channels,
+                          kernel_size=3,
+                          inference_mode=inference_mode),
+
+               )
         else:
             self.conv2 = nn.Identity()
 
         if use_attention:
             self.attention2 = SCSEModule(in_channels=out_channels)
         else:
-            self.attention2 = nn.Identity()
+            self.attention2 =nn.Identity()
 
+
+        ###init the weights
+        initialize_decoder(self.conv1)
+        initialize_decoder(self.conv2)
     def forward(self, x, skip=None):
 
         x = F.interpolate(x, scale_factor=2, mode="nearest")
@@ -222,8 +338,7 @@ class UnetDecoder(nn.Module):
             encoder_channels,
             decoder_channels,
             n_blocks=5,
-            use_batchnorm=True,
-            attention_type=None,
+            inference_mode=True
 
     ):
         super().__init__()
@@ -250,37 +365,40 @@ class UnetDecoder(nn.Module):
 
         blocks = []
 
-        kernel_size = [5, 5, 3, 3, 3]
+        kernel_size=[5,3,3,3,3]
 
-        for n, (in_ch, skip_ch, out_ch) in enumerate(zip(in_channels, skip_channels, out_channels)):
+        for n,(in_ch, skip_ch, out_ch) in enumerate(zip(in_channels, skip_channels, out_channels)):
 
-            if n == 0:
-                use_attention = True
-                use_separable_conv = True
-                use_second_conv = False
 
-            elif n == 1:
-                use_attention = False
-                use_separable_conv = True
-                use_second_conv = True
+
+            if n==0:
+                use_attention=False
+                use_separable_conv=True
+                use_second_conv=True
+
+            elif n==1  :
+                use_attention=False
+                use_separable_conv=True
+                use_second_conv=False
 
 
             else:
-                use_attention = False
-                use_separable_conv = True
-                use_second_conv = False
+                use_attention=False
+                use_separable_conv=True
+                use_second_conv=False
 
             blocks.append(DecoderBlock(in_ch, skip_ch, out_ch, \
                                        use_separable_conv=use_separable_conv, \
                                        use_attention=use_attention,
                                        use_second_conv=use_second_conv,
-                                       kernel_size=kernel_size[n]))
+                                       kernel_size=kernel_size[n],
+                                       inference_mode=inference_mode))
 
         self.blocks = nn.ModuleList(blocks)
 
     def forward(self, *features):
 
-        features = features[1:]  # remove first skip with same spatial resolution
+        features = features[1:]    # remove first skip with same spatial resolution
         features = features[::-1]  # reverse channels to start from head of encoder
 
         head = features[0]
@@ -288,7 +406,8 @@ class UnetDecoder(nn.Module):
 
         x = self.center(head)
 
-        all_fms = []
+        all_fms=[]
+
 
         for i, decoder_block in enumerate(self.blocks):
             skip = skips[i] if i < len(skips) else None
@@ -298,136 +417,116 @@ class UnetDecoder(nn.Module):
         return all_fms
 
 
+
+class CenterNet(nn.Module):
+    def __init__(self,encoder_channels=[3, 16,24, 40 ,80],inference_mode=False):
+        super(CenterNet, self).__init__()
+
+        # self.extra_feature = FeatureFuc(encoder_channels[-1],inference_mode=inference_mode)
+        self.aspp = ASPP(encoder_channels[-1], [2, 4, 8])
+
+        encoder_channels[-1]=128
+
+        self.decoder = UnetDecoder(
+            encoder_channels=encoder_channels,
+            decoder_channels=[128, 128],
+
+            n_blocks=2,
+            inference_mode=inference_mode
+        )
+
+        self.cls = SeparableConv2d(128, 1, kernel_size=3, stride=1, padding=1, bias=True)
+        self.wh = SeparableConv2d(128, 4, kernel_size=3, stride=1, padding=1, bias=True)
+
+        normal_init(self.cls.conv_pw, 0, 0.01, -2.19)
+        normal_init(self.wh.conv_pw, 0, 0.01, 0)
+
+
+        initialize_decoder(self.decoder)
+        # initialize_head(self.hm)
+        # initialize_head(self.wh)
+    def forward(self, features):
+
+        # extra_feature = self.extra_feature(features[-1])
+        # features[-1] = extra_feature
+        features[-1] = self.aspp(features[-1])
+
+        #
+        decoder_output = self.decoder(*features)
+
+        pre_cls = self.cls(decoder_output[-1])
+
+        pre_wh= self.wh(decoder_output[-1])
+
+
+        return pre_cls, pre_wh*16, decoder_output
+
 class Net(nn.Module):
-    def __init__(self, ):
+    def __init__(self,inference_mode=False):
         super(Net, self).__init__()
 
         self.encoder = timm.create_model(model_name='tf_mobilenetv3_large_minimal_100',
                                          pretrained=True,
                                          features_only=True,
-                                         out_indices=[0, 1, 2, 4],
+                                         out_indices=[0,1,2,4],
                                          bn_momentum=bn_momentum,
                                          bn_eps=1e-3,
                                          in_chans=3,
-                                         output_stride=16
+                                         output_stride=16,
                                          )
+
+        # self.encoder.blocks[4]=nn.Identity()
         # self.encoder.blocks[5]=nn.Identity()
-        # self.encoder.blocks[6]=nn.Identity()
+        self.encoder.blocks[6]=nn.Identity()
 
         # print(self.encoder)
         # self.encoder=MobileNetV2Backbone(in_channels=3)
-        self.encoder.out_channels = [3, 16, 24, 40, 128]
+        self.encoder.out_channels=[3, 16,24, 40 ,160]
         # self.encoder.out_channels=[3,16, 24, 32, 88, 720]
 
-        self.aspp = ASPP(960, [2, 4, 8])
-
-        self.decoder = UnetDecoder(
-            encoder_channels=self.encoder.out_channels,
-            decoder_channels=[128, 128],
-            # decoder_channels=[128, 64,32,16,16],
-            n_blocks=2,
-            attention_type=None,
-        )
-
-        self.cls = nn.Conv2d(128, 80, kernel_size=3, stride=1, padding=1, bias=True)
-        self.wh = nn.Conv2d(128, 4, kernel_size=3, stride=1, padding=1, bias=True)
-
-        normal_init(self.cls, 0, 0.01,-2.19)
-        normal_init(self.wh, 0, 0.01, 0)
-
-
-        initialize_decoder(self.decoder)
-
-
-
+        self.centernet=CenterNet(self.encoder.out_channels,inference_mode=inference_mode)
     def forward(self, x):
         """Sequentially pass `x` trough model`s encoder, decoder and heads"""
 
-        features = self.encoder(x)
+        features=self.encoder(x)
 
-        features = [x] + features
-
-        # for tt in features:
-        #     print(tt.size())
-
-        features[-1] = self.aspp(features[-1])
-        # features.pop(-2)
-        # for tt in features:
-        #     print(tt.size())
-        #
-        decoder_output = self.decoder(*features)
-
-        # decoder_output=[features[-1]]+decoder_output
-
-        pre_cls = self.cls(decoder_output[-1])
-        pre_wh = self.wh(decoder_output[-1])
-
-        return pre_cls, pre_wh*16, decoder_output
+        features=[x]+features
+        pre_hm, pre_wh, decoder_output = self.centernet(features)
+        return pre_hm, pre_wh, decoder_output
 
 
 class TeacherNet(nn.Module):
-    def __init__(self, ):
+    def __init__(self,):
         super(TeacherNet, self).__init__()
 
         self.encoder = timm.create_model(model_name='tf_efficientnet_b5_ns',
                                          pretrained=True,
                                          features_only=True,
-                                         out_indices=[0, 1, 2, 4],
+                                         out_indices=[0,1,2,3],
                                          bn_momentum=bn_momentum,
                                          bn_eps=1e-3,
                                          in_chans=3,
-                                         output_stride=16
                                          )
         # print(self.encoder)
         # print(self.encoder.blocks[6])
 
         # self.encoder.blocks[6]=torch.nn.Identity()
         # self.encoder=MobileNetV2Backbone(in_channels=3)
-        self.encoder.out_channels = [3, 24, 40, 64, 128]
+        self.encoder.out_channels=[3, 24 , 40, 64,176]
         # self.encoder.out_channels=[3,16, 24, 32, 88, 720]
-        # self.extra_feature = FeatureFuc(176)
-        self.aspp = ASPP(512, [2, 4, 8])
 
-        self.decoder = UnetDecoder(
-            encoder_channels=self.encoder.out_channels,
-            decoder_channels=[128, 128],
-
-            # decoder_channels=[128, 64,32,16,16],
-            n_blocks=2,
-            attention_type=None,
-        )
-
-        self.cls = nn.Conv2d(128, 80, kernel_size=3, stride=1, padding=1, bias=True)
-        self.wh = nn.Conv2d(128, 4, kernel_size=3, stride=1, padding=1, bias=True)
-
-        initialize_decoder(self.decoder)
-
-        normal_init(self.cls, 0, 0.01,-2.19)
-        normal_init(self.wh, 0, 0.01, 0)
+        self.centernet = CenterNet(self.encoder.out_channels,inference_mode=False)
 
 
     def forward(self, x):
         """Sequentially pass `x` trough model`s encoder, decoder and heads"""
 
-        features = self.encoder(x)
+        features=self.encoder(x)
 
-        features = [x] + features
+        features=[x]+features
+        pre_hm, pre_wh, ecoder_output = self.centernet(features)
 
-        # for tt in features:
-        #     print(tt.size())
-
-        features[-1] = self.aspp(features[-1])
-        #
-
-        decoder_output = self.decoder(*features)
-
-        # decoder_output=[features[-1]]+decoder_output
-
-        pre_cls = self.cls(decoder_output[-1])
-        pre_wh = self.wh(decoder_output[-1])
-
-
-        return pre_cls, pre_wh*16, decoder_output
+        return  pre_hm, pre_wh, ecoder_output
 
 
 class COTRAIN(nn.Module):
@@ -436,21 +535,24 @@ class COTRAIN(nn.Module):
 
         self.inference = inference
 
-        # from lib.core.model.centernet import CenterNet
+        from lib.core.model.centernet import CenterNet
         # self.student = CenterNet()
         #
         # state_dict = torch.load('centernet_mobilenetv2_stride4.pth', map_location='cpu')
         # self.student.load_state_dict(state_dict, strict=False)
-
+        #
         self.student=Net()
 
-        self.teacher = TeacherNet()
+        # self.teacher = TeacherNet()
 
         self.MSELoss = nn.MSELoss()
 
         self.act = nn.Sigmoid()
 
         self.criterion = CenterNetLoss()
+    def reparameterize(self):
+        from lib.core.base_trainer.mobileone import reparameterize_model
+        self.student = reparameterize_model(self.student)
 
     def distill_loss(self, student_pres, teacher_pres):
 
@@ -465,13 +567,14 @@ class COTRAIN(nn.Module):
 
         cls_loss, wh_loss = self.criterion([pre_cls, pred_hw], [hm_target, wh_target, weights])
 
+        # print(cls_loss,wh_loss)
         current_loss = cls_loss + wh_loss
 
         return current_loss
 
     def forward(self, x, hm_target=None, wh_target=None, weights=None):
 
-        student_pre_cls, student_pre_wh ,student_decoder_output= self.student(x)
+        student_pre_cls, student_pre_wh,student_decoder_output = self.student(x)
 
         # teacher_pre_cls, teacher_pre_hw, teacher_decoder_output=self.teacher(x)
 
@@ -491,7 +594,7 @@ class COTRAIN(nn.Module):
         # teacher_loss = self.loss( teacher_pre_cls, teacher_pre_hw, hm_target, wh_target, weights)
 
         return student_loss, student_loss, student_loss,None
-    def decode(self, heatmap, wh, stride, K=100):
+    def decode(self, heatmap, wh, stride, K=10):
         def nms(heat, kernel=3):
             ##fast
 
