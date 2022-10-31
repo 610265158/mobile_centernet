@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ChangeListManager">
+    <list default="true" id="eac327b4-938c-4a7d-8579-19b0c388a4ff" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/lib/core/api.py" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/base_trainer/model.py" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/base_trainer/model.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/core/base_trainer/network.py" beforeDir="false" afterPath="$PROJECT_DIR$/lib/core/base_trainer/network.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/dataset/dataietr.py" beforeDir="false" afterPath="$PROJECT_DIR$/lib/dataset/dataietr.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/train.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/train_config.py" beforeDir="false" afterPath="$PROJECT_DIR$/train_config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/val.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/visulization/vis.py" beforeDir="false" afterPath="$PROJECT_DIR$/visulization/vis.py" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProjectId" id="2GfTQJlc1urt1zlObtZCdLusyJW" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "last_opened_file_path": "/Users/liangzi/lz/sina/mobile_centernet",
+    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
+  }
+}]]></component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="eac327b4-938c-4a7d-8579-19b0c388a4ff" name="Changes" comment="" />
+      <created>1666778623570</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1666778623570</updated>
+    </task>
+    <servers />
+  </component>
+</project>

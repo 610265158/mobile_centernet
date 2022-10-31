@@ -9,11 +9,10 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"          ##if u use muti gpu set them v
 config.TRAIN = edict()
 
 #### below are params for dataiter
-config.TRAIN.process_num = 0                      ### process_num for data provider
+config.TRAIN.process_num = 4                      ### process_num for data provider
 config.TRAIN.prefetch_size = 4                  ### prefect Q size for data provider
 
 config.TRAIN.test_interval=1
-config.TRAIN.num_gpu = 1                         ##match with   os.environ["CUDA_VISIBLE_DEVICES"]
 
 config.TRAIN.batch_size = 32                    ###A big batch size may achieve a better result, but the memory is a problem
 config.TRAIN.validatiojn_batch_size=64
@@ -31,7 +30,7 @@ config.TRAIN.init_lr=0.001
 config.TRAIN.warmup_step=1000
 config.TRAIN.opt='Adamw'
 config.TRAIN.weight_decay_factor = 1.e-5                  ##l2 regular
-config.TRAIN.vis=True                                    ##check data flag
+config.TRAIN.vis=False                                    ##check data flag
 
 if config.TRAIN.vis:
     config.TRAIN.mix_precision=False
